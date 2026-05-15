@@ -193,6 +193,21 @@ Provides:
 - all-MiniLM-L6-v2
 
 ---
+---
+
+## Project Archive & Resources
+
+Complete project resources including:
+- raw datasets
+- processed datasets
+- YOLO model weights
+- demonstration videos
+- additional files
+- project materials
+
+Google Drive Archive:
+
+https://drive.google.com/drive/folders/1X2DTqPRzyYZypY-2txkBtzWPYZyk-N51?usp=sharing
 
 ## Repository Structure
 
@@ -212,3 +227,4 @@ A-Ware-AI-System/
 │
 ├── requirements.txt
 ├── README.md
+
