@@ -1,245 +1,151 @@
-import sys
 import os
 import io
-import re
-from pathlib import Path
-
-# --- 1. Fix OS File Watcher Error ---
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-
-import streamlit as st
+import json
+import base64
+from typing import List, Optional
+from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from PIL import Image
+from dotenv import load_dotenv
 
-# Add project root to path for relative imports
+# Load environment variables
+load_dotenv()
+
+# We need to add the parent directory to sys.path if not running from root
+import sys
+from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.engine import WarehouseAI
 
-# --- 2. Page Configuration ---
-st.set_page_config(
-    page_title="A-Ware",
-    page_icon="✨",
-    layout="centered",
-    initial_sidebar_state="expanded" 
+# Initialize Engine
+engine = WarehouseAI()
+
+app = FastAPI(title="A-Ware API", description="Backend for the A-Ware Multimodal Logistics Assistant")
+
+# Configure CORS for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# --- 3. UI CSS Injection ---
-st.markdown("""
-<style>
-    /* Absolute Dark Mode */
-    .stApp, [data-testid="stAppViewContainer"] {
-        background-color: #0d0d0e !important;
-        color: #e3e3e3 !important;
-        font-family: 'Inter', 'Roboto', sans-serif;
-    }
-    
-    .main .block-container { background-color: #0d0d0e !important; }
-    [data-testid="stBottom"], [data-testid="stBottomBlock"] { background-color: #0d0d0e !important; }
-    
-    /* FIX: Hide branding but KEEP the sidebar toggle visible */
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    header { background: transparent !important; }
+class ChatHistoryMessage(BaseModel):
+    role: str
+    content: str
 
-    /* Sidebar Dark */
-    [data-testid="stSidebar"] {
-        background-color: #0d0d0e !important;
-        border-right: 1px solid #2a2b2c !important;
-    }
-    [data-testid="stSidebar"] > div { background-color: #0d0d0e !important; }
-    
-    /* Custom Title Header */
-    .a-ware-title {
-        font-size: 2.2rem;
-        font-weight: 500;
-        padding-top: 10px;
-        padding-bottom: 30px;
-        color: #e3e3e3 !important;
-    }
-
-    /* Chat Input Container */
-    .stChatInputContainer {
-        background-color: #1a1b1c !important;
-        border-radius: 30px !important;
-        border: 1px solid #2a2b2c !important;
-    }
-    .stChatInputContainer textarea {
-        background-color: #1a1b1c !important;
-        color: #e3e3e3 !important;
-        -webkit-text-fill-color: #e3e3e3 !important;
-        border: none !important;
-    }
-    
-    /* Assistant Message Block */
-    [data-testid="stChatMessage"]:nth-child(even) {
-        background-color: transparent !important;
-        border: none !important;
-        padding: 0px 10px;
-        margin-bottom: 24px;
-        margin-left: 0 !important;
-        width: 100% !important;
-    }
-
-    /* Expander Styling for Collapsed Thinking */
-    [data-testid="stExpander"] {
-        background-color: #1a1b1c !important;
-        border: 1px solid #2a2b2c !important;
-        border-radius: 12px;
-        margin-bottom: 15px;
-    }
-    [data-testid="stExpander"] p, [data-testid="stExpander"] span {
-        color: #a8c7fa !important;
-        font-size: 0.9rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# --- 4. Engine & State Initialization ---
-@st.cache_resource(show_spinner=False)
-def load_engine():
-    return WarehouseAI()
-
-engine = load_engine()
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "active_images" not in st.session_state:
-    st.session_state.active_images = [] 
-
-# --- 5. Sidebar Controls ---
-with st.sidebar:
-    st.markdown("## A-Ware Controls")
-    
-    if st.button("🗑️ Clear All Chat & Context", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.active_images = []
-        st.rerun()
-
-    st.markdown("---")
-    
-    with st.expander("🖼️ Manage Active Images", expanded=True):
-        if not st.session_state.active_images:
-            st.info("No active images.")
+@app.post("/api/chat")
+async def chat_endpoint(
+    query: str = Form(...),
+    use_yolo_only: bool = Form(False),
+    history_file: Optional[UploadFile] = File(None),
+    context_images_file: Optional[UploadFile] = File(None),
+    files: List[UploadFile] = File(default=[])
+):
+    try:
+        if history_file:
+            content = await history_file.read()
+            parsed_history = json.loads(content.decode("utf-8"))
         else:
-            for idx, img_bytes in enumerate(st.session_state.active_images):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.image(img_bytes, caption=f"View {idx+1}", use_container_width=True)
-                with col2:
-                    if st.button("❌", key=f"del_{idx}"):
-                        st.session_state.active_images.pop(idx)
-                        st.rerun()
-            st.caption(f"Count: {len(st.session_state.active_images)} / 5")
+            parsed_history = []
+    except Exception as e:
+        print("Failed to parse history_file", e)
+        parsed_history = []
 
-# --- 6. Helper Function to Render Thinking Blocks ---
-def render_message_content(content):
-    """Extracts <thinking> blocks and renders them inside a collapsed expander."""
-    # Robust fallback just in case tags are missing or malformed
-    if "<thinking>" in content:
-        match = re.search(r"<thinking>(.*?)(?:</thinking>|$)", content, flags=re.DOTALL)
-        if match:
-            thinking_text = match.group(1).strip()
-            clean_content = re.sub(r"<thinking>.*?(?:</thinking>|$)", "", content, flags=re.DOTALL).strip()
+    images_to_process = []
+    try:
+        if context_images_file:
+            content = await context_images_file.read()
+            active_images_b64 = json.loads(content.decode("utf-8"))
+            for b64_str in active_images_b64:
+                if "," in b64_str:
+                    _, data = b64_str.split(",", 1)
+                else:
+                    data = b64_str
+                img_data = base64.b64decode(data)
+                img = Image.open(io.BytesIO(img_data)).convert("RGB")
+                images_to_process.append(img)
+    except Exception as e:
+        print(f"Failed to parse context_images_file: {e}")
+
+    def event_stream():
+        ans = ""
+        meta = []
+        ann = []
+        
+        status_map = {
+            "analyze_vision": "Running Vision Agent (YOLO/ReAct)...",
+            "retrieve_context": "Retrieving spatial context from ChromaDB...",
+            "generate_response": "Synthesizing response with Gemini 3.1..."
+        }
+        
+        for node_name, state_update in engine.process_query(query, images_to_process, parsed_history, use_yolo_only):
+            if node_name in status_map:
+                yield f"data: {json.dumps({'status': status_map[node_name]})}\n\n"
+                
+            if node_name == "generate_response":
+                ans = state_update.get("final_response", "")
+            if "metadata" in state_update:
+                meta = state_update["metadata"]
+            if "annotated_images" in state_update:
+                ann = state_update["annotated_images"]
+                
+        encoded_annotations = []
+        for img_bytes in ann:
+            encoded_str = base64.b64encode(img_bytes).decode("utf-8")
+            encoded_annotations.append(f"data:image/jpeg;base64,{encoded_str}")
             
-            with st.expander("Thought Process"):
-                st.markdown(thinking_text)
-            st.markdown(clean_content)
-        else:
-            st.markdown(content)
-    else:
-        st.markdown(content)
+        yield f"data: {json.dumps({'response': ans, 'metadata': meta, 'annotated_images': encoded_annotations})}\n\n"
 
-# --- 7. Main Chat Interface ---
-st.markdown('<div class="a-ware-title">A-Ware</div>', unsafe_allow_html=True)
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        if msg.get("image_list"):
-            cols = st.columns(min(len(msg["image_list"]), 3))
-            for i, img_b in enumerate(msg["image_list"]):
-                cols[i % 3].image(img_b, use_container_width=True)
-        
-        render_message_content(msg["content"])
-        
-        if msg.get("annotated_list"):
-            st.markdown("### Vision Annotations")
-            for i, ann_img in enumerate(msg["annotated_list"]):
-                st.image(ann_img, caption=f"View {i+1} Detection", use_container_width=True)
+from fastapi import Request
+import app.db_manager as db
 
-# --- 8. Input & Processing ---
-prompt_data = st.chat_input("Ask about spatial data or multiple viewpoints...", accept_file=True, file_type=['png', 'jpg', 'jpeg', 'webp'])
+@app.get("/api/sessions")
+def get_sessions():
+    return db.get_all_sessions()
 
-if prompt_data:
-    prompt_text = prompt_data.text.strip() if hasattr(prompt_data, 'text') and prompt_data.text else ""
-    uploaded_files = prompt_data.get("files") if hasattr(prompt_data, "get") else getattr(prompt_data, "files", [])
-    
-    just_uploaded_list = []
-    if uploaded_files:
-        for file in uploaded_files:
-            if len(st.session_state.active_images) < 5:
-                img_data = file.getvalue()
-                st.session_state.active_images.append(img_data)
-                just_uploaded_list.append(img_data)
-        
-        if not prompt_text:
-            prompt_text = "Perform an inventory scan on these views."
+@app.post("/api/sessions")
+async def save_session(req: Request):
+    session = await req.json()
+    db.save_session(session)
+    return {"status": "ok"}
 
-    if not prompt_text and not st.session_state.active_images:
-        st.stop()
+@app.put("/api/sessions/{session_id}/title")
+async def update_title(session_id: str, req: Request):
+    payload = await req.json()
+    success = db.update_session_title(session_id, payload.get("title", "New Session"))
+    return {"success": success}
 
-    history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-    
-    with st.chat_message("user"):
-        if just_uploaded_list:
-            cols = st.columns(min(len(just_uploaded_list), 3))
-            for i, img_b in enumerate(just_uploaded_list):
-                cols[i % 3].image(img_b, use_container_width=True)
-        st.markdown(prompt_text)
-    
-    st.session_state.messages.append({
-        "role": "user", 
-        "content": prompt_text, 
-        "image_list": just_uploaded_list if just_uploaded_list else None
-    })
+@app.delete("/api/sessions/{session_id}")
+async def delete_session_ep(session_id: str):
+    db.delete_session(session_id)
+    return {"status": "ok"}
 
-    with st.chat_message("assistant"):
-        all_metadata = []
-        all_annotations = []
-        combined_answers = []
-        
-        with st.status("✨ Analyzing Facility...", expanded=True) as status:
-            if st.session_state.active_images:
-                for idx, img_bytes in enumerate(st.session_state.active_images):
-                    img_obj = Image.open(io.BytesIO(img_bytes))
-                    ans, meta, ann = engine.process_image_query(img_obj, prompt_text, history)
-                    
-                    # Only prepend "View X" if we actually have multiple images to prevent annoyance on single images
-                    prefix = f"**View {idx+1}:**\n" if len(st.session_state.active_images) > 1 else ""
-                    combined_answers.append(f"{prefix}{ans}")
-                    all_metadata.append(meta)
-                    if ann: all_annotations.append(ann)
-            else:
-                ans, meta = engine.process_text_query(prompt_text, history)
-                combined_answers.append(ans)
-                all_metadata.append(meta)
-            
-            status.update(label="Scan Complete", state="complete", expanded=False)
+class TitleRequest(BaseModel):
+    query: str
 
-        final_response = "\n\n---\n\n".join(combined_answers)
-        render_message_content(final_response)
-        
-        if all_annotations:
-            st.markdown("### Aggregated Detections")
-            for i, ann in enumerate(all_annotations):
-                st.image(ann, caption=f"Annotated View {i+1}", use_container_width=True)
+@app.post("/api/generate-title")
+def generate_title(req: TitleRequest):
+    try:
+        from langchain_core.messages import HumanMessage
+        prompt = f"Summarize this query into a concise 2-4 word Title for a chat session. Do not use quotes or punctuation. Return ONLY the title. Query: '{req.query}'"
+        msg = engine.llm.invoke([HumanMessage(content=prompt)])
+        content = msg.content
+        if isinstance(content, list):
+            content = content[0].get("text", "New Session")
+        return {"title": content.strip().replace('\"', '')}
+    except Exception as e:
+        print(f"Generate title error: {e}")
+        return {"title": "New Session"}
 
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": final_response,
-        "annotated_list": all_annotations if all_annotations else None,
-        "metadata": all_metadata
-    })
-    
-    st.rerun()
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

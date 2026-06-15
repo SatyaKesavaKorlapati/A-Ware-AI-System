@@ -1,0 +1,28 @@
+# Ignore environments
+awenv/
+awenv2/
+venv/
+env/
+
+# Ignore JS modules and builds
+node_modules/
+.next/
+dist/
+build/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore API keys and env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore OS files
+.DS_Store
+Thumbs.db

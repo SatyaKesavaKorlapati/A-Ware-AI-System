@@ -1,4 +1,6 @@
-streamlit
+fastapi
+uvicorn
+python-multipart
 ultralytics
 torch
 torchvision
@@ -9,7 +11,7 @@ pandas
 Pillow
 chromadb
 sentence-transformers
-google-generativeai
+google-genai
 transformers
 accelerate
 bitsandbytes
@@ -26,3 +28,7 @@ protobuf
 grpcio
 requests
 python-dotenv
+langchain
+langchain-core
+langchain-google-genai
+langgraph

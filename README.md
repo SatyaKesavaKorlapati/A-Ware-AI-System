@@ -1,42 +1,57 @@
-# A-Ware: Multimodal Warehouse Intelligence System
+# A-ware: Multimodal Warehouse Intelligence System
 
-A-Ware is a multimodal warehouse intelligence platform that combines synthetic data generation, YOLO-based object detection, Retrieval-Augmented Generation (RAG), and large language models to create an intelligent warehouse assistant capable of answering grounded natural-language inventory queries.
-
-
----
-
-## Overview
-
-A-Ware integrates:
-
-- Synthetic warehouse data generation using NVIDIA Isaac Sim
-- Multi-camera RGBD dataset creation
-- YOLO26-based warehouse object detection
-- ChromaDB-powered spatial RAG
-- Gemini 3.1 Pro for natural-language reasoning
-- Streamlit-based multimodal interface
-
-The project creates a full pipeline from simulation to conversational warehouse intelligence.
+A-ware is a multimodal warehouse intelligence platform that combines a **modern Apple-style Glassmorphism UI**, synthetic data generation, YOLO-based object detection, Retrieval-Augmented Generation (RAG), and large language models (Gemini Pro) to create an intelligent warehouse assistant capable of answering grounded natural-language inventory queries.
 
 ---
 
-## Key Features
+## 🚀 Getting Started (Installation)
 
-- Synthetic multi-camera warehouse dataset generation
-- 22 static cameras + 1 drone camera pipeline
-- Automated annotation generation using Isaac Sim Replicator
-- YOLO26-L object detection training pipeline
-- Multi-image warehouse query support
-- Spatial Retrieval-Augmented Generation (RAG)
-- ChromaDB metadata indexing
-- Gemini 3.1 Pro integration
-- Exact inventory fact-layer retrieval
-- Accumulative conversational query mode
-- Streamlit-based dark-mode UI
+We have packaged the system with a simple automated setup script so anyone can clone and run it instantly.
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/SatyaKesavaKorlapati/A-Ware-AI-System.git
+cd A-Ware-AI-System
+```
+
+### 2. Run the Setup Script
+Run the automated python installer which will prompt you for your Gemini API Key, build your virtual environment, and install all Python and Node.js dependencies.
+```bash
+python setup.py
+```
+
+### 3. Launch the Application
+You will need two terminal windows to run the system:
+
+**Terminal 1 (Backend API):**
+```bash
+# On Windows
+awenv\Scripts\python app\main.py
+
+# On Mac/Linux
+awenv/bin/python app/main.py
+```
+
+**Terminal 2 (Frontend UI):**
+```bash
+cd frontend
+npm run dev
+```
+
+The application will be live at `http://localhost:3000`.
 
 ---
 
-## System Architecture
+## ✨ New Features & UI Overhaul
+- **Apple-Style Glassmorphism UI:** A sleek, fully responsive dark-mode chat interface with frosted glass sidebars.
+- **Dynamic Rainbow Glow:** A beautiful, non-intrusive animated rainbow edge glow that can be toggled via the user profile.
+- **Custom Chat Emojis:** Sessions now automatically assign custom emojis to conversations based on context, which you can manually edit with a 15+ animated emoji picker.
+- **Smart Chat Typist:** Text generation animations play in real-time for new messages and load instantly when viewing old histories.
+- **Interactive Sidebar:** Drag-to-resize support, compact-mode collapsing, and centered adaptive layouts.
+
+---
+
+## 🧠 System Architecture
 
 The system pipeline consists of five major stages:
 
@@ -56,24 +71,20 @@ to answer grounded warehouse inventory questions.
 
 ---
 
-## Dataset Generation
+## 📦 Dataset Generation
 
 ### Simulator
-
 - NVIDIA Isaac Sim
 - USD-based warehouse environment
 - omni.replicator.core for synchronized capture
 
 ### Camera Setup
-
 - 22 static warehouse cameras
 - 1 scripted drone camera
 - Multi-view warehouse coverage
 
 ### Captured Modalities
-
 Each frame contains:
-
 - RGB image
 - Bounding box annotations
 - Instance segmentation
@@ -81,7 +92,6 @@ Each frame contains:
 - Metric depth maps
 
 ### Dataset Variants
-
 | Dataset | Frames | Classes |
 |---|---|---|
 | warehouse-bb | 880 | 28 |
@@ -89,22 +99,13 @@ Each frame contains:
 | masterwarehouse-2640 | 2640 | 21 |
 
 ### Structural Class Filtering
-
-The pipeline removes structural classes such as:
-- floor
-- wall
-- ceiling
-- rack
-- background
-
-This improved recall by approximately 2.3×.
+The pipeline removes structural classes such as floor, wall, ceiling, rack, background. This improved recall by approximately 2.3×.
 
 ---
 
-## YOLO26 Training
+## 🔍 YOLO26 Training
 
 ### Final Production Model
-
 | Metric | Value |
 |---|---|
 | Model | YOLO26-L |
@@ -116,7 +117,6 @@ This improved recall by approximately 2.3×.
 | Epochs | 100 |
 
 ### Training Improvements
-
 Key optimizations:
 - High-resolution training (1280px)
 - Structural class filtering
@@ -126,27 +126,9 @@ Key optimizations:
 
 ---
 
-## A-Ware Application
-
-The application supports:
-- Text-only warehouse queries
-- Image-based warehouse analysis
-- Multi-image uploads
-- Conversational inventory reasoning
-
-### Example Queries
-
-- "How many boxes are in Aisle 4?"
-- "Show crates along with barrels"
-- "Which aisle has the most items?"
-- "Where are the fire extinguishers?"
-
----
-
-## RAG Knowledge Base
+## 🗄️ RAG Knowledge Base
 
 ### ChromaDB Metadata Index
-
 The warehouse metadata contains:
 - 2,754 indexed warehouse objects
 - Spatial coordinates
@@ -155,76 +137,25 @@ The warehouse metadata contains:
 - Semantic text descriptions
 
 ### Two-Layer Retrieval Architecture
-
 #### Fact Layer
-Provides:
-- exact inventory counts
-- aisle summaries
-- rack summaries
-- shelf summaries
+Provides exact inventory counts, aisle summaries, rack summaries, shelf summaries.
 
 #### Document Layer
-Provides:
-- semantic retrieval
-- object-level spatial reasoning
-- contextual warehouse information
+Provides semantic retrieval, object-level spatial reasoning, contextual warehouse information.
 
 ---
 
-## Technologies Used
+## 🛠️ Technologies Used
+- **Frontend:** Next.js, React, CSS3 Glassmorphism
+- **AI / ML:** PyTorch, Ultralytics YOLO, Sentence Transformers, Gemini 3.1 Pro
+- **Simulation:** NVIDIA Isaac Sim, USD, omni.replicator.core
+- **Backend:** Python, FastAPI, ChromaDB
+- **Embeddings:** all-MiniLM-L6-v2
 
-### AI / ML
-- PyTorch
-- Ultralytics YOLO
-- Sentence Transformers
-- Gemini 3.1 Pro
-
-### Simulation
-- NVIDIA Isaac Sim
-- USD
-- omni.replicator.core
-
-### Backend
-- Python
-- ChromaDB
-- Streamlit
-
-### Embeddings
-- all-MiniLM-L6-v2
-
----
 ---
 
 ## Project Archive & Resources
-
-Complete project resources including:
-- raw datasets
-- processed datasets
-- YOLO model weights
-- demonstration videos
-- additional files
-- project materials
+Complete project resources including raw datasets, processed datasets, YOLO model weights, demonstration videos, and additional files:
 
 Google Drive Archive:
-
 https://drive.google.com/drive/folders/1X2DTqPRzyYZypY-2txkBtzWPYZyk-N51?usp=sharing
-
-## Repository Structure
-
-```text
-A-Ware-AI-System/
-│
-├── app/
-│   ├── main.py
-│   ├── engine.py
-│
-├── Python/
-│   ├── Scripts/
-│   ├── Models/
-│
-├── MDta/
-│   ├── warehouse_rag_metadata_full.json
-│
-├── requirements.txt
-├── README.md
-
