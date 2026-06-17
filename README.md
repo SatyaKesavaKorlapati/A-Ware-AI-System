@@ -48,10 +48,18 @@ The application will be live at `http://localhost:3000`.
 
 ---
 
-## ✨ New Features & UI Overhaul
+## ✨ Major 2.0 Features & UI Overhaul
+
+**Core System Capabilities:**
+- **🎙️ Voice Mode (Speech-to-Text):** Integrated native browser speech recognition for hands-free warehouse queries and command execution.
+- **🛡️ Database Safety Toggle:** A strict "Database Modifying Mode" UI toggle that explicitly locks the AI from executing any hallucinated SQL `INSERT`/`UPDATE`/`DELETE` queries when disabled.
+- **📊 Dynamic Visual Legend:** A real-time legend panel that automatically extracts and tracks unique item properties and visual color-hashes directly from the SQL database.
+- **⚡ Real-Time Map Reactivity:** The warehouse map immediately reflects backend database modifications through automatic 5-second polling hooks and a manual force-refresh action.
+
+**Aesthetic Enhancements:**
 - **Apple-Style Glassmorphism UI:** A sleek, fully responsive dark-mode chat interface with frosted glass sidebars.
-- **Dynamic Rainbow Glow:** A beautiful, non-intrusive animated rainbow edge glow that can be toggled via the user profile.
-- **Custom Chat Emojis:** Sessions now automatically assign custom emojis to conversations based on context, which you can manually edit with a 15+ animated emoji picker.
+- **Dynamic Rainbow Glow:** A beautiful, non-intrusive animated rainbow edge glow that tracks activity state.
+- **Custom Chat Emojis:** Sessions now automatically assign custom emojis to conversations based on context, which you can manually edit with an animated emoji picker.
 - **Smart Chat Typist:** Text generation animations play in real-time for new messages and load instantly when viewing old histories.
 - **Interactive Sidebar:** Drag-to-resize support, compact-mode collapsing, and centered adaptive layouts.
 
@@ -188,7 +196,6 @@ The Cognitive Engine natively supports complex, multi-step CRUD operations utili
 
 Check out the interactive A-Ware application in action!
 
-*(Note: Add screenshot links here)*
 ![UI Showcase](assets/1_comp.jpg)
 ![Interactive Map](assets/2_comp.jpg)
 
