@@ -1,6 +1,6 @@
 # A-ware: Multimodal Warehouse Intelligence System
 
-A-ware is a multimodal warehouse intelligence platform that combines a **modern Apple-style Glassmorphism UI**, synthetic data generation, YOLO-based object detection, Retrieval-Augmented Generation (RAG), and large language models (Gemini Pro) to create an intelligent warehouse assistant capable of answering grounded natural-language inventory queries.
+A-ware is a multimodal warehouse intelligence platform that combines a **modern Glassmorphism UI**, synthetic data generation, YOLO-based object detection, Retrieval-Augmented Generation (RAG), and large language models (Gemini Pro) to create an intelligent warehouse assistant capable of answering grounded natural-language inventory queries.
 
 ---
 
@@ -57,7 +57,7 @@ The application will be live at `http://localhost:3000`.
 - **⚡ Real-Time Map Reactivity:** The warehouse map immediately reflects backend database modifications through automatic 5-second polling hooks and a manual force-refresh action.
 
 **Aesthetic Enhancements:**
-- **Apple-Style Glassmorphism UI:** A sleek, fully responsive dark-mode chat interface with frosted glass sidebars.
+- **Glassmorphism UI:** A sleek, fully responsive dark-mode chat interface with frosted glass sidebars.
 - **Dynamic Rainbow Glow:** A beautiful, non-intrusive animated rainbow edge glow that tracks activity state.
 - **Custom Chat Emojis:** Sessions now automatically assign custom emojis to conversations based on context, which you can manually edit with an animated emoji picker.
 - **Smart Chat Typist:** Text generation animations play in real-time for new messages and load instantly when viewing old histories.
@@ -200,7 +200,7 @@ Check out the interactive A-Ware application in action!
 ![Interactive Map](assets/2_comp.jpg)
 
 **Application Walkthrough:**
-![Demo Video](assets/demo.gif)
+![Voice Mode & Logic Showcase](assets/5_comp.jpg)
 
 ---
 
