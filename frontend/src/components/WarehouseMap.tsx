@@ -155,10 +155,11 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
 
   const getCategoryHash = (category: string) => {
       let hash = 0;
-      const str = category.toLowerCase();
+      const str = category.toLowerCase().trim();
       for (let i = 0; i < str.length; i++) {
           hash = str.charCodeAt(i) + ((hash << 5) - hash);
       }
+      hash = hash ^ (str.length * 9973);
       return Math.abs(hash);
   };
 
@@ -188,17 +189,17 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
   };
 
   const legendData = useMemo(() => {
-      const cats: Record<number, Record<number, {name: string, count: number}>> = {};
+      const cats: Record<number, Record<string, {colorIdx: number, count: number}>> = {};
       itemsWithNormalizedRack.forEach(item => {
           const cat = item.category.toLowerCase();
           const hash = getCategoryHash(cat);
           const shapeIdx = Math.floor(hash / 10) % 10;
           const colorIdx = hash % 10;
           if (!cats[shapeIdx]) cats[shapeIdx] = {};
-          if (!cats[shapeIdx][colorIdx]) {
-              cats[shapeIdx][colorIdx] = { name: cat, count: 0 };
+          if (!cats[shapeIdx][cat]) {
+              cats[shapeIdx][cat] = { colorIdx: colorIdx, count: 0 };
           }
-          cats[shapeIdx][colorIdx].count += 1;
+          cats[shapeIdx][cat].count += 1;
       });
       return cats;
   }, [itemsWithNormalizedRack]);
@@ -569,13 +570,12 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
                               )
                           ) : (
                               // Level 2: List categories for this shape
-                              Object.entries(legendData[legendSelectedShape] || {}).map(([colorStr, data]) => {
-                                  const colorIdx = parseInt(colorStr);
+                              Object.entries(legendData[legendSelectedShape] || {}).map(([catName, data]) => {
                                   return (
-                                      <div key={colorIdx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                                      <div key={catName} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.05)", borderRadius: "8px" }}>
                                           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                              <div style={{ ...getShapeStyle("", legendSelectedShape), background: COLORS[colorIdx] }} />
-                                              <span style={{ color: "white", fontSize: "0.9rem", textTransform: "capitalize" }}>{data.name}</span>
+                                              <div style={{ ...getShapeStyle("", legendSelectedShape), background: COLORS[data.colorIdx] }} />
+                                              <span style={{ color: "white", fontSize: "0.9rem", textTransform: "capitalize" }}>{catName}</span>
                                           </div>
                                           <span style={{ color: "#8fa0ba", fontSize: "0.8rem", background: "rgba(0,0,0,0.3)", padding: "2px 8px", borderRadius: "10px" }}>{data.count} items</span>
                                       </div>
