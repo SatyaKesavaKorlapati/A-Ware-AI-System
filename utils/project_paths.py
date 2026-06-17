@@ -7,4 +7,4 @@ METADATA_PATH = PROJECT_ROOT / "MDta" / "warehouse_rag_metadata_full.json"
 MODELS_DIR = PROJECT_ROOT / "Python" / "Models"
 
 def ensure_local_model_dirs():
-    return {"minilm": None}
+    return {"minilm": None, "yolo": MODELS_DIR / "lar1r.pt"}

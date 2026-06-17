@@ -20,10 +20,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.engine import WarehouseAI
+from app.engine import AWareEngine
+from app.visualize import router as visualize_router
 
 # Initialize Engine
-engine = WarehouseAI()
+engine = AWareEngine()
 
 app = FastAPI(title="A-Ware API", description="Backend for the A-Ware Multimodal Logistics Assistant")
 
@@ -36,6 +37,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(visualize_router)
+
 class ChatHistoryMessage(BaseModel):
     role: str
     content: str
@@ -44,6 +47,7 @@ class ChatHistoryMessage(BaseModel):
 async def chat_endpoint(
     query: str = Form(...),
     use_yolo_only: bool = Form(False),
+    allow_changes: bool = Form(False),
     history_file: Optional[UploadFile] = File(None),
     context_images_file: Optional[UploadFile] = File(None),
     files: List[UploadFile] = File(default=[])
@@ -80,16 +84,20 @@ async def chat_endpoint(
         ann = []
         
         status_map = {
-            "analyze_vision": "Running Vision Agent (YOLO/ReAct)...",
-            "retrieve_context": "Retrieving spatial context from ChromaDB...",
-            "generate_response": "Synthesizing response with Gemini 3.1..."
+            "contextualize": "Understanding chat context...",
+            "supervisor": "Supervisor routing query...",
+            "sql_agent": "SQL Agent querying inventory database...",
+            "rag_manual_agent": "RAG Agent retrieving system manuals...",
+            "rag_specs_agent": "RAG Agent retrieving system specs & research...",
+            "vision_agent": "Vision Agent analyzing images with YOLO...",
+            "final_synthesis": "Synthesizing final response..."
         }
         
-        for node_name, state_update in engine.process_query(query, images_to_process, parsed_history, use_yolo_only):
+        for node_name, state_update in engine.process_query(query, images_to_process, parsed_history, use_yolo_only, allow_changes):
             if node_name in status_map:
                 yield f"data: {json.dumps({'status': status_map[node_name]})}\n\n"
                 
-            if node_name == "generate_response":
+            if node_name == "final_synthesis":
                 ans = state_update.get("final_response", "")
             if "metadata" in state_update:
                 meta = state_update["metadata"]
@@ -124,6 +132,14 @@ async def update_title(session_id: str, req: Request):
     success = db.update_session_title(session_id, payload.get("title", "New Session"))
     return {"success": success}
 
+class PinRequest(BaseModel):
+    is_pinned: bool
+
+@app.put("/api/sessions/{session_id}/pin")
+def update_pin(session_id: str, req: PinRequest):
+    success = db.update_session_pin(session_id, req.is_pinned)
+    return {"success": success}
+
 @app.delete("/api/sessions/{session_id}")
 async def delete_session_ep(session_id: str):
     db.delete_session(session_id)
@@ -136,7 +152,7 @@ class TitleRequest(BaseModel):
 def generate_title(req: TitleRequest):
     try:
         from langchain_core.messages import HumanMessage
-        prompt = f"Summarize this query into a concise 2-4 word Title for a chat session. Do not use quotes or punctuation. Return ONLY the title. Query: '{req.query}'"
+        prompt = f"Summarize this query into a concise 2-4 word Title for a chat session, and prepend a single relevant emoji. Do not use quotes or punctuation. Return ONLY the emoji and title. Query: '{req.query}'"
         msg = engine.llm.invoke([HumanMessage(content=prompt)])
         content = msg.content
         if isinstance(content, list):

@@ -2,7 +2,9 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, ImagePlus, ChevronDown, ChevronRight, Loader2, X, Plus, MessageSquare, Menu, PanelLeftClose, User, Zap, Pin, CheckSquare, Square, MoreVertical, Edit2, Copy, Trash2 , Sidebar} from "lucide-react";
+import { Send, ImagePlus, ChevronDown, ChevronRight, Loader2, X, Plus, MessageSquare, Menu, PanelLeftClose, User, Zap, Pin, PinOff, CheckSquare, Square, MoreVertical, Edit2, Copy, Trash2, Sidebar, Database, Network, Sparkles, Brain, Map, Mic, MicOff, Captions, CaptionsOff } from "lucide-react";
+import WarehouseMap from "../components/WarehouseMap";
+import { useVoiceMode } from "../hooks/useVoiceMode";
 
 type Message = {
   role: "user" | "assistant";
@@ -25,6 +27,8 @@ type ChatSession = {
   title: string;
   messages: Message[];
   imageQueue: ImageContext[];
+  is_pinned?: boolean;
+  updated_at?: number;
 };
 
 // Typing Effect Component
@@ -89,6 +93,7 @@ export default function Home() {
   }, [isResizing]);
 
   const [yoloBypass, setYoloBypass] = useState(false);
+  const [allowChanges, setAllowChanges] = useState(false);
   const [popoutOpen, setPopoutOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -99,8 +104,23 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [animText, setAnimText] = useState(true);
   const [animUI, setAnimUI] = useState(true);
-  const [animRainbow, setAnimRainbow] = useState(false);
+  const [animRainbow, setAnimRainbow] = useState(true);
+  
+  const [showCaptions, setShowCaptions] = useState(true);
+
+  // Define sendMessage before useVoiceMode
+  const sendMessageRef = useRef<(text?: string) => void>();
+  
+  const { isVoiceMode, setIsVoiceMode, voiceStatus, transcript, llmReply, speakText } = useVoiceMode((text) => {
+      if (sendMessageRef.current) sendMessageRef.current(text);
+  });
+  const [animChatOpen, setAnimChatOpen] = useState(true);
+  const [animDeleteChat, setAnimDeleteChat] = useState(true);
   const [animSpeed, setAnimSpeed] = useState(0.3);
+  const [vaporizingSessionId, setVaporizingSessionId] = useState<string | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [chatKey, setChatKey] = useState(0);
+  const [appMode, setAppMode] = useState<"chat" | "map">("chat");
 
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renamingText, setRenamingText] = useState("");
@@ -138,7 +158,9 @@ export default function Home() {
     setSessions(prev => {
       const exists = prev.find(p => p.id === id);
       const title = exists ? exists.title : defaultTitle;
-      const s: ChatSession = { id, title, messages: msgs, imageQueue: queue };
+      const emoji = exists ? exists.emoji : undefined;
+      const is_pinned = exists ? exists.is_pinned : false;
+      const s: ChatSession = { id, title, emoji, messages: msgs, imageQueue: queue, is_pinned, updated_at: Date.now() };
       
       fetch("http://localhost:8000/api/sessions", {
         method: "POST",
@@ -159,6 +181,7 @@ export default function Home() {
     setInput("");
     setSelectedFiles([]);
     setPreviews([]);
+    if (animChatOpen) setChatKey(prev => prev + 1);
   };
 
   const loadSession = (s: ChatSession) => {
@@ -168,6 +191,20 @@ export default function Home() {
     setInput("");
     setSelectedFiles([]);
     setPreviews([]);
+    if (animChatOpen) setChatKey(prev => prev + 1);
+  };
+
+  const toggleSessionPin = async (id: string, currentPinStatus: boolean) => {
+    const newStatus = !currentPinStatus;
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, is_pinned: newStatus } : s));
+    try {
+      await fetch(`http://localhost:8000/api/sessions/${id}/pin`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_pinned: newStatus })
+      });
+    } catch (e) {}
+    setActiveMenuId(null);
   };
 
   
@@ -210,14 +247,30 @@ export default function Home() {
   };
 
 
-  const deleteSession = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this session?")) return;
-    try {
-      await fetch(`http://localhost:8000/api/sessions/${id}`, { method: "DELETE" });
-      setSessions(prev => prev.filter(s => s.id !== id));
-      if (currentSessionId === id) startNewSession();
-    } catch(e) {}
+  const deleteSession = (id: string) => {
+    setSessionToDelete(id);
     setActiveMenuId(null);
+  };
+
+  const confirmDelete = async (id: string) => {
+    setSessionToDelete(null);
+    if (animDeleteChat) {
+      setVaporizingSessionId(id);
+      setTimeout(async () => {
+        try {
+          await fetch(`http://localhost:8000/api/sessions/${id}`, { method: "DELETE" });
+          setSessions(prev => prev.filter(s => s.id !== id));
+          if (currentSessionId === id) startNewSession();
+        } catch(e) {}
+        setVaporizingSessionId(null);
+      }, animSpeed * 1000);
+    } else {
+      try {
+        await fetch(`http://localhost:8000/api/sessions/${id}`, { method: "DELETE" });
+        setSessions(prev => prev.filter(s => s.id !== id));
+        if (currentSessionId === id) startNewSession();
+      } catch(e) {}
+    }
   };
 
   const generateTitle = async (query: string, sid: string) => {
@@ -300,6 +353,10 @@ export default function Home() {
       const content = text.replace(/<thinking>[\s\S]*?<\/thinking>/, "").trim();
       return { thinking, content };
     }
+    const openMatch = text.match(/<thinking>([\s\S]*)/);
+    if (openMatch) {
+      return { thinking: openMatch[1].trim(), content: "" };
+    }
     return { thinking: undefined, content: text.trim() };
   };
 
@@ -329,11 +386,11 @@ export default function Home() {
     saveCurrentSessionToDB(currentSessionId, sessions.find(s=>s.id===currentSessionId)?.title || "New Session", newMsgs, imageQueue);
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() && selectedFiles.length === 0) return;
+  const sendMessage = async (overrideInput?: string) => {
+    const currentInput = overrideInput !== undefined ? overrideInput : input;
+    if (!currentInput.trim() && selectedFiles.length === 0) return;
 
     const isFirstMessage = messages.length === 0;
-    const currentInput = input;
     const userMessage: Message = {
       role: "user",
       content: currentInput,
@@ -379,6 +436,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("query", currentInput);
       formData.append("use_yolo_only", yoloBypass.toString());
+      formData.append("allow_changes", allowChanges.toString());
       
       const historyStr = JSON.stringify(updatedMsgs.map(m => ({ role: m.role, content: m.content })));
       const historyBlob = new Blob([historyStr], { type: 'application/json' });
@@ -430,6 +488,11 @@ export default function Home() {
                 setMessages(finalMsgs);
                 const st = sessions.find(s => s.id === currentSessionId)?.title || "New Session";
                 await saveCurrentSessionToDB(currentSessionId, st, finalMsgs, nextQueue);
+                
+                // Voice mode speech trigger
+                if (isVoiceMode) {
+                   speakText(content);
+                }
               }
             } catch (e) {}
           }
@@ -445,6 +508,10 @@ export default function Home() {
       setLoadingStatus("");
     }
   };
+  
+  useEffect(() => {
+      sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -488,8 +555,14 @@ export default function Home() {
 
         <div className="history-list">
           <div className="history-label hide-on-compact">Sessions</div>
-          {sessions.map(s => (
-            <div key={s.id} className={`history-item ${s.id === currentSessionId ? 'active' : ''}`} onClick={() => loadSession(s)}>
+          {sessions.slice().sort((a, b) => {
+              if (a.is_pinned && !b.is_pinned) return -1;
+              if (!a.is_pinned && b.is_pinned) return 1;
+              const aTime = a.updated_at || 0;
+              const bTime = b.updated_at || 0;
+              return bTime - aTime;
+          }).map(s => (
+            <div key={s.id} className={`history-item ${s.id === currentSessionId ? 'active' : ''} ${s.id === vaporizingSessionId ? 'anim-vaporize' : ''}`} onClick={() => loadSession(s)}>
               <span className="session-icon" onClick={(e) => {
                   if (!sidebarOpen) return;
                   e.stopPropagation();
@@ -515,6 +588,7 @@ export default function Home() {
                   {s.title}
                 </span>
               )}
+              {s.is_pinned && <Pin size={12} style={{ marginLeft: "auto", marginRight: "5px", color: "#8fa0ba" }} className="hide-on-compact" />}
               {sidebarOpen && renamingSessionId !== s.id && (
                 <div className="session-menu-wrapper" onClick={e => e.stopPropagation()}>
                   <button className="dots-btn" onClick={(e) => {
@@ -550,20 +624,38 @@ export default function Home() {
               <span className="user-role">Warehouse Admin</span>
             </div>
             
+            <div className="hide-on-compact" style={{ marginLeft: "auto", display: "flex", gap: "5px" }}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setAppMode(appMode === "chat" ? "map" : "chat"); }} 
+                  style={{ background: "transparent", border: "none", color: appMode === "map" ? "white" : "#8fa0ba", cursor: "pointer", transition: "0.2s", padding: "5px" }}
+                  title="Toggle Map View"
+                  onMouseEnter={e => e.currentTarget.style.color="white"}
+                  onMouseLeave={e => { if(appMode !== "map") e.currentTarget.style.color="#8fa0ba" }}
+                >
+                  <Map size={18} />
+                </button>
+            </div>
           </div>
         </div>
       </div>
 
 
       {profileMenuOpen && (
-        <div className={`dots-dropdown ${animUI ? 'anim-pop' : ''}`} style={{ position: 'fixed', bottom: window.innerHeight - menuPos.top, left: menuPos.left + 10, zIndex: 9999 }} onClick={e => e.stopPropagation()}>
+        <div className={`dots-dropdown ${animUI ? 'anim-pop' : ''}`} style={{ position: 'fixed', bottom: window.innerHeight - menuPos.top, left: menuPos.left + 10, zIndex: 9999, transformOrigin: 'bottom left' }} onClick={e => e.stopPropagation()}>
           <button onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}><Zap size={16}/> Animations</button>
           <button onClick={() => { setProfileMenuOpen(false); }}><User size={16}/> Log Out</button>
         </div>
       )}
 
       {activeMenuId && (
-        <div className={`dots-dropdown ${animUI ? 'anim-pop' : ''}`} style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999 }} onClick={e => e.stopPropagation()}>
+        <div className={`dots-dropdown ${animUI ? 'anim-pop' : ''}`} style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999, transformOrigin: 'top left' }} onClick={e => e.stopPropagation()}>
+          <button onClick={() => {
+              const s = sessions.find(s=>s.id===activeMenuId);
+              if(s) toggleSessionPin(activeMenuId, !!s.is_pinned);
+          }}>
+            {sessions.find(s=>s.id===activeMenuId)?.is_pinned ? <PinOff size={16}/> : <Pin size={16}/>}
+            {sessions.find(s=>s.id===activeMenuId)?.is_pinned ? "Unpin" : "Pin"}
+          </button>
           <button onClick={() => startRename(activeMenuId, sessions.find(s=>s.id===activeMenuId)?.title || "")}><Edit2 size={16}/> Rename</button>
           <button onClick={(e) => {
              const rect = e.currentTarget.getBoundingClientRect();
@@ -576,7 +668,7 @@ export default function Home() {
       )}
 
       {emojiPickerId && (
-        <div className={`emoji-grid emoji-train ${animUI ? 'anim-pop' : ''}`} style={{ top: emojiPickerPos.top, left: emojiPickerPos.left }} onClick={e => e.stopPropagation()}>
+        <div className={`emoji-grid emoji-train ${animUI ? 'anim-pop' : ''}`} style={{ top: emojiPickerPos.top, left: emojiPickerPos.left, transformOrigin: 'top left' }} onClick={e => e.stopPropagation()}>
           {EMOJIS.map(em => (
             <button key={em} className="emoji-btn" onClick={() => changeEmoji(emojiPickerId, em)}>{em}</button>
           ))}
@@ -597,19 +689,33 @@ export default function Home() {
           <div className={`settings-modal ${animUI ? 'anim-pop' : ''}`} onClick={e => e.stopPropagation()}>
             <h2>Animations Profile <button className="settings-close" onClick={() => setSettingsOpen(false)}><X size={18}/></button></h2>
             
-            <div className="settings-row">
-              <span>Text Generation Animation</span>
-              <label className="toggle-switch"><input type="checkbox" checked={animText} onChange={e => setAnimText(e.target.checked)} /><span className="slider round"></span></label>
-            </div>
-            
-            <div className="settings-row">
-              <span>UI Pop Animations</span>
-              <label className="toggle-switch"><input type="checkbox" checked={animUI} onChange={e => setAnimUI(e.target.checked)} /><span className="slider round"></span></label>
-            </div>
+            <div className="settings-section" style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: '#8fa0ba', letterSpacing: '1px', fontWeight: 'bold' }}>Animation Toggles</div>
+              
+              <div className="settings-row">
+                <span>Text Generation Animation</span>
+                <label className="toggle-switch"><input type="checkbox" checked={animText} onChange={e => setAnimText(e.target.checked)} /><span className="slider round"></span></label>
+              </div>
+              
+              <div className="settings-row">
+                <span>UI Pop Animations (Apple Style)</span>
+                <label className="toggle-switch"><input type="checkbox" checked={animUI} onChange={e => setAnimUI(e.target.checked)} /><span className="slider round"></span></label>
+              </div>
 
-            <div className="settings-row">
-              <span>Rainbow Sidebar Glow</span>
-              <label className="toggle-switch"><input type="checkbox" checked={animRainbow} onChange={e => setAnimRainbow(e.target.checked)} /><span className="slider round"></span></label>
+              <div className="settings-row">
+                <span>Chat Transitions (Slide & Fade)</span>
+                <label className="toggle-switch"><input type="checkbox" checked={animChatOpen} onChange={e => setAnimChatOpen(e.target.checked)} /><span className="slider round"></span></label>
+              </div>
+
+              <div className="settings-row">
+                <span>Vaporize Delete Effect</span>
+                <label className="toggle-switch"><input type="checkbox" checked={animDeleteChat} onChange={e => setAnimDeleteChat(e.target.checked)} /><span className="slider round"></span></label>
+              </div>
+
+              <div className="settings-row">
+                <span>Rainbow Sidebar Glow</span>
+                <label className="toggle-switch"><input type="checkbox" checked={animRainbow} onChange={e => setAnimRainbow(e.target.checked)} /><span className="slider round"></span></label>
+              </div>
             </div>
 
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '10px' }}>
@@ -617,16 +723,40 @@ export default function Home() {
               <input type="range" min="0.1" max="1.0" step="0.1" value={animSpeed} onChange={e => setAnimSpeed(parseFloat(e.target.value))} style={{ width: '100%' }} />
             </div>
 
-            <button onClick={() => { setAnimText(true); setAnimUI(true); setAnimRainbow(false); setAnimSpeed(0.3); }} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', marginTop: '10px' }}>
+            <button onClick={() => { setAnimText(true); setAnimUI(true); setAnimChatOpen(true); setAnimDeleteChat(true); setAnimRainbow(false); setAnimSpeed(0.3); }} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', marginTop: '10px' }}>
               Reset Default Animations
             </button>
           </div>
         </div>
       )}
 
+      {sessionToDelete && (
+        <div className="settings-modal-overlay" onClick={() => setSessionToDelete(null)}>
+          <div className={`settings-modal ${animUI ? 'anim-pop' : ''}`} onClick={e => e.stopPropagation()} style={{ textAlign: "center", maxWidth: "300px" }}>
+            <h3 style={{ margin: "0 0 10px 0", color: "#ff595e" }}>Delete Session</h3>
+            <p style={{ color: "#8fa0ba", fontSize: "0.95rem", marginBottom: "24px" }}>Are you completely sure you want to delete this chat? This cannot be undone.</p>
+            <div style={{ display: "flex", gap: "12px", justifyItems: "stretch" }}>
+              <button onClick={() => setSessionToDelete(null)} style={{ flex: 1, padding: "10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white", cursor: "pointer", transition: "0.2s" }} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.05)"}>Cancel</button>
+              <button onClick={() => confirmDelete(sessionToDelete)} style={{ flex: 1, padding: "10px", borderRadius: "8px", background: "#ff595e", border: "none", color: "white", cursor: "pointer", fontWeight: "600", transition: "0.2s" }} onMouseEnter={e=>e.currentTarget.style.background="#ff3a40"} onMouseLeave={e=>e.currentTarget.style.background="#ff595e"}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <div className="main-area" style={{ paddingLeft: sidebarOpen ? sidebarWidth : 70 }}>
-        <div className="top-bar">
+      <div key={chatKey} className={`main-area ${animChatOpen ? 'anim-slide-in' : ''}`} style={{ paddingLeft: sidebarOpen ? sidebarWidth : 70 }}>
+        {appMode === "map" ? (
+           <WarehouseMap animUI={animUI} allowChanges={allowChanges} setAllowChanges={setAllowChanges} onAgentInteraction={async (q, r) => {
+             const userMsg: Message = { role: "user", content: q };
+             const botMsg: Message = { role: "assistant", content: r };
+             const finalMsgs = [...messages, userMsg, botMsg];
+             setMessages(finalMsgs);
+             const st = sessions.find(s => s.id === currentSessionId)?.title || "New Session";
+             await saveCurrentSessionToDB(currentSessionId, st, finalMsgs, imageQueue);
+           }} />
+        ) : (
+          <>
+            <div className="top-bar">
           <div className="top-bar-left"></div>
           <div className="top-bar-right" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
              <div className="context-manager-wrapper" style={{ display: 'inline-block' }}>
@@ -635,7 +765,7 @@ export default function Home() {
                  <span className="hide-on-mobile">Context Quota</span>
                </button>
                {popoutOpen && (
-                 <div className="context-popout" style={{ top: '100%', bottom: 'auto', marginTop: '10px', right: 0, left: 'auto', transformOrigin: 'top right' }}>
+                 <div className={`context-popout ${animUI ? 'anim-pop' : ''}`} style={{ top: '100%', bottom: 'auto', marginTop: '10px', right: 0, left: 'auto', transformOrigin: 'top right' }}>
                    <div className="context-popout-header">
                      <span>Image Context Queue</span>
                      <button className="context-popout-close" onClick={() => setPopoutOpen(false)}><X size={16} /></button>
@@ -665,11 +795,18 @@ export default function Home() {
                  </div>
                )}
              </div>
-            <label className="toggle-switch" title="Bypass LLM vision and rely ONLY on YOLO detections">
-              <input type="checkbox" checked={yoloBypass} onChange={(e) => setYoloBypass(e.target.checked)} />
-              <span className="slider round"></span>
-              <span className="toggle-label"><Zap size={14} color="#ffca3a" /> YOLO Bypass</span>
-            </label>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <label className="toggle-switch" title="Bypass LLM vision and rely ONLY on YOLO detections">
+                <input type="checkbox" checked={yoloBypass} onChange={(e) => setYoloBypass(e.target.checked)} />
+                <span className="slider round"></span>
+                <span className="toggle-label"><Zap size={14} color="#ffca3a" /> YOLO Bypass</span>
+              </label>
+              <label className="toggle-switch" title="Allow the agent to modify the SQL inventory database">
+                <input type="checkbox" checked={allowChanges} onChange={(e) => setAllowChanges(e.target.checked)} />
+                <span className="slider round" style={allowChanges ? { backgroundColor: '#ef476f' } : {}}></span>
+                <span className="toggle-label"><CheckSquare size={14} color={allowChanges ? '#ef476f' : '#888'} /> Allow Changes</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -703,8 +840,11 @@ export default function Home() {
                     rows={1}
                     style={{ height: input.split('\n').length > 1 ? `${Math.min(input.split('\n').length * 24, 200)}px` : "auto" }}
                   />
-                  <button className="btn-send" onClick={sendMessage} disabled={isLoading || (!input.trim() && selectedFiles.length === 0)}>
+                  <button className="btn-send" onClick={() => sendMessage()} disabled={isLoading || (!input.trim() && selectedFiles.length === 0)}>
                     <Send size={18} />
+                  </button>
+                  <button className="btn-send" onClick={() => setIsVoiceMode(true)} style={{ marginLeft: "8px" }} title="Start Voice Mode">
+                    <Mic size={18} />
                   </button>
                 </div>
               </div>
@@ -728,7 +868,7 @@ export default function Home() {
                         </div>
                       )}
                       
-                      {m.thinking && <ThinkingBlock text={m.thinking} />}
+                      {m.thinking && <ThinkingBlock text={m.thinking} animUI={animUI} />}
                       
                       {m.isTyping && m.role === "assistant" && animText ? (
                         <Typewriter text={m.content} onComplete={() => {
@@ -742,8 +882,8 @@ export default function Home() {
                       
                       {/* Hover Actions */}
                       <div className="message-actions">
-                        {m.role === "assistant" && !m.isTyping && (
-                          <button className="msg-action-btn" onClick={() => copyToClipboard(m.content)} title="Copy Response">
+                        {!m.isTyping && (
+                          <button className="msg-action-btn" onClick={() => copyToClipboard(m.content)} title="Copy">
                             <Copy size={14} />
                           </button>
                         )}
@@ -759,7 +899,12 @@ export default function Home() {
                 {isLoading && (
                   <div className="message-row assistant">
                     <div className="message-bubble" style={{ display: "flex", gap: "10px", alignItems: "center", color: "#8fa0ba" }}>
-                      <Loader2 className="animate-spin" size={18} /> {loadingStatus}
+                      {loadingStatus.toLowerCase().includes('sql') ? <Database className="animate-pulse" size={18} /> :
+                       loadingStatus.toLowerCase().includes('rout') ? <Network className="animate-pulse" size={18} /> :
+                       loadingStatus.toLowerCase().includes('generat') ? <Sparkles className="animate-pulse" size={18} /> :
+                       loadingStatus.toLowerCase().includes('think') ? <Brain className="animate-pulse" size={18} /> :
+                       <Loader2 className="animate-spin" size={18} />}
+                      {loadingStatus || "Loading..."}
                     </div>
                   </div>
                 )}
@@ -794,20 +939,47 @@ export default function Home() {
                     rows={1}
                     style={{ height: input.split('\n').length > 1 ? `${Math.min(input.split('\n').length * 24, 200)}px` : "auto" }}
                   />
-                  <button className="btn-send" onClick={sendMessage} disabled={isLoading || (!input.trim() && selectedFiles.length === 0)}>
+                  <button className="btn-send" onClick={() => sendMessage()} disabled={isLoading || (!input.trim() && selectedFiles.length === 0)}>
                     <Send size={18} />
+                  </button>
+                  <button className="btn-send" onClick={() => setIsVoiceMode(true)} style={{ marginLeft: "8px" }} title="Start Voice Mode">
+                    <Mic size={18} />
                   </button>
                 </div>
               </div>
             </div>
           </>
         )}
+        </>
+        )}
       </div>
+
+      {isVoiceMode && (
+        <div className="voice-overlay">
+          <div className="voice-controls">
+            <button className="voice-btn" onClick={() => setShowCaptions(!showCaptions)} title="Toggle Captions">
+              {showCaptions ? <Captions size={24} /> : <CaptionsOff size={24} />}
+            </button>
+            <button className="voice-btn danger" onClick={() => setIsVoiceMode(false)} title="Close Voice Mode">
+              <X size={32} />
+            </button>
+          </div>
+          {showCaptions && (
+            <div className="voice-captions">
+              {voiceStatus === 'listening' ? transcript || "Listening..." : null}
+              {voiceStatus === 'thinking' ? "Thinking..." : null}
+              {voiceStatus === 'speaking' ? llmReply : null}
+              {voiceStatus === 'idle' ? "..." : null}
+            </div>
+          )}
+          <div className={`voice-orb ${voiceStatus}`} />
+        </div>
+      )}
     </div>
   );
 }
 
-function ThinkingBlock({ text }: { text: string }) {
+function ThinkingBlock({ text, animUI }: { text: string, animUI: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="thinking-block">
@@ -816,7 +988,7 @@ function ThinkingBlock({ text }: { text: string }) {
         Thought Process
       </div>
       {open && (
-        <div className="thinking-content">
+        <div className={`thinking-content ${animUI ? 'anim-fade-rise' : ''}`} style={{ transformOrigin: 'top left' }}>
           <ReactMarkdown>{text}</ReactMarkdown>
         </div>
       )}

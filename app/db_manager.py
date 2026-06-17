@@ -50,6 +50,17 @@ def update_session_title(session_id: str, title: str):
             return True
     return False
 
+def update_session_pin(session_id: str, is_pinned: bool):
+    init_db()
+    sessions = get_all_sessions()
+    for i, s in enumerate(sessions):
+        if s.get("id") == session_id:
+            sessions[i]["is_pinned"] = is_pinned
+            with open(SESSIONS_FILE, "w") as f:
+                json.dump(sessions, f, indent=2)
+            return True
+    return False
+
 def delete_session(session_id: str):
     init_db()
     sessions = get_all_sessions()

@@ -14,21 +14,27 @@ git clone https://github.com/SatyaKesavaKorlapati/A-Ware-AI-System.git
 cd A-Ware-AI-System
 ```
 
-### 2. Run the Setup Script
-Run the automated python installer which will prompt you for your Gemini API Key, build your virtual environment, and install all Python and Node.js dependencies.
+### 2. Run the Interactive Setup
+Run the automated python installer. It will:
+- Prompt you for your **Gemini API Key**.
+- Automatically build your virtual environment and install all Python & Node.js dependencies.
+- Optionally create an **A-Ware Launcher** shortcut directly on your Desktop for 1-click startup!
+
 ```bash
 python setup.py
 ```
 
 ### 3. Launch the Application
-You will need two terminal windows to run the system:
+If you generated the Desktop Launcher during setup, simply double-click `A-Ware Launcher.bat` on your Desktop!
+
+Otherwise, you can run the two servers manually:
 
 **Terminal 1 (Backend API):**
 ```bash
-# On Windows
+# Windows
 awenv\Scripts\python app\main.py
 
-# On Mac/Linux
+# Mac/Linux
 awenv/bin/python app/main.py
 ```
 
@@ -53,21 +59,30 @@ The application will be live at `http://localhost:3000`.
 
 ## 🧠 System Architecture
 
-The system pipeline consists of five major stages:
+The Cognitive Engine is powered by a robust LangChain/LangGraph supervisor architecture:
 
-1. Synthetic data generation in NVIDIA Isaac Sim
-2. Automatic annotation generation and dataset preparation
-3. YOLO26 training and benchmarking
-4. Spatial metadata extraction and indexing
-5. Multimodal warehouse intelligence application
+```mermaid
+graph TD
+    User([User Query]) --> API[Next.js API]
+    API --> Supervisor{Supervisor Agent}
+    
+    Supervisor -->|Database Queries| SQLAgent[SQL Inventory Agent]
+    Supervisor -->|Operations/Policy| RAGManuals[RAG Manuals Agent]
+    Supervisor -->|Research/Specs| RAGSpecs[RAG Specs Agent]
+    Supervisor -->|Images/Visuals| VisionAgent[YOLO + Vision Agent]
+    
+    SQLAgent --> SQLite[(Inventory SQLite DB)]
+    RAGManuals --> Chroma[(ChromaDB Vector Store)]
+    RAGSpecs --> Chroma
+    
+    SQLite --> Synthesizer[Final Synthesizer]
+    Chroma --> Synthesizer
+    VisionAgent --> Synthesizer
+    
+    Synthesizer --> User
+```
 
-The application combines:
-- YOLO detections
-- Warehouse spatial metadata
-- ChromaDB semantic retrieval
-- Gemini-based reasoning
-
-to answer grounded warehouse inventory questions.
+The system combines YOLO detections, precise SQL Spatial Constraints (e.g., 600-item rack limits), Vector semantic retrieval, and Gemini-based reasoning to safely execute complex warehouse operations.
 
 ---
 
@@ -146,11 +161,42 @@ Provides semantic retrieval, object-level spatial reasoning, contextual warehous
 ---
 
 ## 🛠️ Technologies Used
-- **Frontend:** Next.js, React, CSS3 Glassmorphism
-- **AI / ML:** PyTorch, Ultralytics YOLO, Sentence Transformers, Gemini 3.1 Pro
+
+### Frontend
+- **Framework:** Next.js, React
+- **Styling:** CSS3 Glassmorphism
+
+### Backend
+- **Framework:** Python, FastAPI
+- **Database:** ChromaDB (Vector DB), SQLite (Inventory DB)
 - **Simulation:** NVIDIA Isaac Sim, USD, omni.replicator.core
-- **Backend:** Python, FastAPI, ChromaDB
-- **Embeddings:** all-MiniLM-L6-v2
+
+### 🤖 AI Models Config
+- **LLM:** gemini-3.1-flash-lite
+- **Embedding:** gemini-embedding-2
+- **Vision:** YOLO26-L (LAR1r)
+
+---
+
+## 🚀 Advanced Engine Features
+The Cognitive Engine natively supports complex, multi-step CRUD operations utilizing robust SQL subqueries and dynamic arrays:
+- **Multi-Query Execution**: Automatically chains multiple SQL queries into a unified atomic action for complex spatial reasoning and bulk operations.
+- **Bulk Insertion Optimization**: Employs SQLite `WITH RECURSIVE` Common Table Expressions to perform massive bulk insertions (e.g., 1000 items) flawlessly without hitting token limits.
+- **Strict Physical Constraints**: Hardcoded Database Triggers physically block the AI from violating warehouse capacities (e.g., 600 items max per rack).
+- **Anti-Hallucination Measures**: The AI is strictly prompt-bound to refuse operations if the 'Database Modifying Mode' is disabled, eliminating fake SQL completion reports.
+
+---
+
+## 📸 Media & Screenshots
+
+Check out the interactive A-Ware application in action!
+
+*(Note: Add screenshot links here)*
+![UI Showcase](assets/1_comp.jpg)
+![Interactive Map](assets/2_comp.jpg)
+
+**Application Walkthrough:**
+![Demo Video](assets/demo.gif)
 
 ---
 
