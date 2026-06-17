@@ -141,22 +141,19 @@ Key optimizations:
 
 ---
 
-## 🗄️ RAG Knowledge Base
+## 🗄️ Agentic RAG & Knowledge Base
 
-### ChromaDB Metadata Index
-The warehouse metadata contains:
-- 2,754 indexed warehouse objects
-- Spatial coordinates
-- Rack and aisle mapping
-- Shelf-level information
-- Semantic text descriptions
+Our system completely abandons traditional single-vector retrieval in favor of a true **Multi-Agent RAG** architecture powered by two specialized databases.
 
-### Two-Layer Retrieval Architecture
-#### Fact Layer
-Provides exact inventory counts, aisle summaries, rack summaries, shelf summaries.
+### Dual-Database Architecture
+- **🗃️ Inventory SQLite DB:** A rigorous, schema-enforced relational database managing exact counts, capacities, bounding boxes, and structural integrity (e.g., maximum rack sizes).
+- **🧠 ChromaDB Vector Store:** A semantic embedding database containing unstructured system manuals, operation policies, and hardware specifications.
 
-#### Document Layer
-Provides semantic retrieval, object-level spatial reasoning, contextual warehouse information.
+### 🤖 Multi-Agent Tool Architecture
+The **Agentic RAG** system dynamically routes queries to specialized autonomous agents equipped with distinct toolsets:
+- **`SQL Inventory Agent`**: Writes and executes complex, multi-layered SQL queries natively to perform spatial reasoning, mass shifts, and exact fact retrieval.
+- **`RAG Manuals Agent`**: Plunges into ChromaDB to retrieve compliance policies, emergency protocols, and standard operating procedures.
+- **`RAG Specs Agent`**: Retrieves detailed hardware properties, weight limits, and physical equipment limitations from embedded manuals.
 
 ---
 
