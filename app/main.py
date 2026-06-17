@@ -21,8 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.engine import AWareEngine
-from app.visualize import router as visualize_router
-
+from app.engine import AWareEngine
 # Initialize Engine
 engine = AWareEngine()
 
@@ -37,7 +36,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(visualize_router)
 
 class ChatHistoryMessage(BaseModel):
     role: str
@@ -161,6 +159,25 @@ def generate_title(req: TitleRequest):
     except Exception as e:
         print(f"Generate title error: {e}")
         return {"title": "New Session"}
+
+from app.sql_manager import query_db, execute_db
+
+@app.get("/api/map/layout")
+def get_map_layout():
+    items = query_db("SELECT * FROM inventory")
+    return {"status": "success", "items": items}
+
+class AdjustRequest(BaseModel):
+    item_id: int
+    action: str
+
+@app.post("/api/map/adjust")
+def adjust_map_item(req: AdjustRequest):
+    if req.action == "decrement":
+        execute_db("DELETE FROM inventory WHERE id = ?", (req.item_id,))
+    elif req.action == "increment":
+        execute_db("INSERT INTO inventory (name, category, x, y, z, rack_id, physical_aisle, shelf_level) SELECT name, category, x, y, z, rack_id, physical_aisle, shelf_level FROM inventory WHERE id = ?", (req.item_id,))
+    return {"status": "success"}
 
 if __name__ == "__main__":
     import uvicorn
