@@ -63,19 +63,19 @@ The Cognitive Engine is powered by a robust LangChain/LangGraph supervisor archi
 
 ```mermaid
 graph TD
-    User([User Query]) --> API[Next.js API]
-    API --> Supervisor{Supervisor Agent}
+    User(["User Query"]) --> API["Next.js API"]
+    API --> Supervisor{"Supervisor Agent"}
     
-    Supervisor -->|Database Queries| SQLAgent[SQL Inventory Agent]
-    Supervisor -->|Operations/Policy| RAGManuals[RAG Manuals Agent]
-    Supervisor -->|Research/Specs| RAGSpecs[RAG Specs Agent]
-    Supervisor -->|Images/Visuals| VisionAgent[YOLO + Vision Agent]
+    Supervisor -->|"Database Queries"| SQLAgent["SQL Inventory Agent"]
+    Supervisor -->|"Operations/Policy"| RAGManuals["RAG Manuals Agent"]
+    Supervisor -->|"Research/Specs"| RAGSpecs["RAG Specs Agent"]
+    Supervisor -->|"Images/Visuals"| VisionAgent["YOLO & Vision Agent"]
     
-    SQLAgent --> SQLite[(Inventory SQLite DB)]
-    RAGManuals --> Chroma[(ChromaDB Vector Store)]
+    SQLAgent --> SQLite[("Inventory SQLite DB")]
+    RAGManuals --> Chroma[("ChromaDB Vector Store")]
     RAGSpecs --> Chroma
     
-    SQLite --> Synthesizer[Final Synthesizer]
+    SQLite --> Synthesizer["Final Synthesizer"]
     Chroma --> Synthesizer
     VisionAgent --> Synthesizer
     
