@@ -269,76 +269,25 @@ class AWareEngine:
         query = state["standalone_query"]
         allow_changes = state["allow_changes"]
         
-        sys_prompt = f'''You are the SQL Inventory Agent. You have access to a SQLite database 'inventory'.
-        Schema: inventory(id, prim_path, name, category, x, y, z, rack_id, physical_aisle, shelf_level, last_updated)
+        from app.sql_skills import create_sql_tools
+        sql_tools = create_sql_tools(allow_changes)
         
-        CRITICAL RULES:
-        1. The `category` column contains the singular noun of the item type (e.g. 'box', 'airplane', 'forklift'). You can use ANY category name the user asks for.
-        2. ALWAYS use singular terms for category filtering. You MUST search both the `name` column and the `category` column using `LIKE` (e.g., `WHERE name LIKE '%airplane%' OR category = 'airplane'`), because items might be named specifically.
-        3. Use the `LIKE` operator if you are unsure.
-        4. NEVER attempt to pull raw rows to do manual math, counting, or aggregations yourself. You MUST offload ALL hard work to SQLite.
-        5. If the user asks for counts, sums, averages, or breakdowns, ALWAYS use SQL aggregations (`COUNT(*)`, `SUM()`, `AVG()`, `MAX()`, `MIN()`) and `GROUP BY`.
-        6. If asked for exact locations of an item, select x, y, z, rack_id, physical_aisle, and shelf_level.
-        7. `physical_aisle` and `shelf_level` MUST be integers, never strings like 'Aisle_6' or 'Level_4'.
-        8. Aisle-to-Rack Mapping: Aisle 1 (Racks 1,2), Aisle 2 (Racks 3,4), Aisle 3 (Racks 5,6), Aisle 4 (Racks 7,8), Aisle 5 (Racks 9,10), Aisle 6 (Racks 11,12). When inserting or updating an item, you MUST ensure `physical_aisle` correctly matches its `rack_id` based on this mapping!
-        9. When asked to UPDATE or DELETE a specific item based on vague descriptions, NEVER use floating point equality or weak string matching. You MUST use a subquery with `IN` or `=` to target the exact row's `id`. Example: `UPDATE inventory SET rack_id=5, physical_aisle=3 WHERE id = (SELECT id FROM inventory WHERE category='lamp' AND rack_id=12 ORDER BY id DESC LIMIT 1)`
-        10. Spatial Coordinate System: `Z` is the vertical height axis (up). `X` and `Y` represent the horizontal floor plane. When asked about 'height', ALWAYS refer to `Z`.
-        11. Physical Constraints: Racks are physically small. When placing or spacing multiple items on a single rack shelf, use very small spatial increments (e.g., 0.2 to 0.5 meters) along `X` or `Y` to ensure they fit. Do not spread items across 10+ meters for a single shelf.
-        
-        12. Rack Capacity Constraints (600 Limit): Racks have a strict physical capacity of exactly 600 items. Do NOT insert items into a rack if it would exceed this limit. If the user doesn't specify a rack, automatically find a rack with the most available space (count < 600) and put the item there. If the user specifies a rack but it's full, DO NOT insert the item; instead, ask them if you should push it into another rack that has space.
-        
-        13. Multi-Query Execution: If you need to perform mass shifts, delete entire subsets of items, or precisely space out multiple items dynamically (e.g., placing 10 items incrementally spaced by 0.5m), you MUST output an array of separate valid SQL queries.
-        
-        14. Bulk Insertion: If you need to add a large number of identical items (e.g. 500 boxes), DO NOT generate 500 separate queries. You MUST use a single query with `WITH RECURSIVE`:
-        Example: WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt WHERE x<500) INSERT INTO inventory (name, category, rack_id, physical_aisle, shelf_level) SELECT 'box', 'box', 12, 6, 1 FROM cnt;
-        
-        Safety rule: allow_changes={allow_changes}.
-        If False, you MUST NOT generate any INSERT/UPDATE/DELETE queries. If the user asks for a modification, output a SELECT query to check the current state, but you MUST explicitly inform the user that their 'Database Modifying Mode' toggle is OFF and must be turned ON. NEVER pretend to make changes if allow_changes is False.
-        If True, you may generate INSERT/UPDATE/DELETE queries.
-        
-        You MUST output your response in the following strict JSON format:
-        {{
-            "sql_queries": [
-                "SELECT count(*) FROM inventory WHERE category = 'box';",
-                "UPDATE inventory SET physical_aisle = 6 WHERE id = 5;"
-            ]
-        }}
-        Do NOT wrap it in markdown. Do NOT explain. If you refuse, output:
-        {{ "sql_queries": ["REFUSE: Safety toggle is OFF."] }}
+        sys_prompt = '''You are the SQL Inventory Agent. You have access to explicit warehouse skills.
+        DO NOT generate raw SQL. Use your explicit tools (`get_inventory`, `add_inventory`, `remove_inventory`, `move_inventory`) to interact with the database safely.
+        Answer the user's query exactly. If you need to make modifications and the tools return REFUSED because safety toggle is OFF, explicitly inform the user they must enable the 'Database Modifying Mode'.
+        Always query for inventory before taking actions if you are unsure of the current state.
         '''
         
         try:
-            response = self._extract_text(self.llm.invoke([SystemMessage(content=sys_prompt), HumanMessage(content=query)]).content).strip()
-            if response.startswith("```"):
-                response = response.split("\n", 1)[1]
-                response = response.rsplit("\n", 1)[0]
+            agent = create_react_agent(self.llm, sql_tools)
+            messages = [
+                SystemMessage(content=sys_prompt),
+                HumanMessage(content=query)
+            ]
+            result = agent.invoke({"messages": messages})
+            sql_info = self._extract_text(result["messages"][-1].content)
         except Exception as e:
-            return {"sql_info": f"Error calling SQL LLM: {e}"}
-            
-        sql_info = ""
-        try:
-            data = json.loads(response)
-            queries = data.get("sql_queries", [])
-            if not queries and "sql_query" in data:
-                queries = [data["sql_query"]]
-                
-            sql_info_list = []
-            for sql_query in queries:
-                if sql_query.startswith("REFUSE"):
-                    sql_info_list.append(sql_query)
-                elif sql_query.strip().upper().startswith("SELECT"):
-                    res = query_db(sql_query)
-                    sql_info_list.append(f"Query: {sql_query}\nResult: {res}")
-                else:
-                    if not allow_changes:
-                        sql_info_list.append("Modification denied: safety toggle is OFF.")
-                    else:
-                        res = execute_db(sql_query)
-                        sql_info_list.append(f"Query: {sql_query}\nResult: {res}")
-            
-            sql_info = "\n".join(sql_info_list)
-        except Exception as e:
-            sql_info = f"Error interpreting SQL agent JSON: {e} - Raw: {response}"
+            sql_info = f"Error interpreting SQL agent: {e}"
             
         return {"sql_info": sql_info}
 
