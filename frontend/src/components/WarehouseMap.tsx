@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, Plus, Minus, Send, X, Package, Database, Brain, Sparkles, Network, CheckSquare, Search, Mic, Captions, CaptionsOff, List, ChevronLeft, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Minus, Send, X, Package, Database, Brain, Sparkles, Network, CheckSquare, Search, Mic, Captions, CaptionsOff, List, ChevronLeft, RefreshCw, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useVoiceMode } from '../hooks/useVoiceMode';
 
@@ -59,7 +59,19 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
   const [showCaptions, setShowCaptions] = useState(true);
   const submitQueryRef = useRef<(text?: string) => void>();
   
-  const { isVoiceMode, setIsVoiceMode, voiceStatus, transcript, llmReply, speakText } = useVoiceMode((text) => {
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const abortQuery = () => {
+      if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+      }
+      setAgentLoading(false);
+      setAgentStatus("");
+      setAgentResponse("User has stopped the response");
+  };
+
+  const { isVoiceMode, setIsVoiceMode, voiceStatus, transcript, llmReply, speakText, interrupt } = useVoiceMode((text) => {
       setQuery(text);
       if (submitQueryRef.current) submitQueryRef.current(text);
   });
@@ -75,13 +87,15 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
     setAgentStatus("Routing...");
     setAgentResponse("");
     try {
+      abortControllerRef.current = new AbortController();
       const formData = new FormData();
       formData.append("query", finalQuery + " (Just do it and reply concisely, I am in map view)");
       formData.append("allow_changes", allowChanges.toString());
       
       const res = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
-        body: formData
+        body: formData,
+        signal: abortControllerRef.current.signal
       });
       
       if (!res.body) return;
@@ -119,11 +133,17 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
       if (isVoiceMode) {
           speakText(content);
       }
-    } catch (e) {
+    } catch (e: any) {
+        if (e.name === 'AbortError') {
+            console.log("Query aborted by user");
+        }
     } finally {
-      setAgentLoading(false);
-      setAgentStatus("");
-      setQuery("");
+        if (abortControllerRef.current) {
+            setAgentLoading(false);
+            setAgentStatus("");
+            setQuery("");
+            abortControllerRef.current = null;
+        }
     }
   };
   
@@ -500,9 +520,15 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
                               disabled={agentLoading}
                               autoFocus
                           />
-                          <button onClick={() => submitQuery()} disabled={agentLoading || !query.trim()} style={{ background: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "8px", color: "white", cursor: agentLoading ? "not-allowed" : "pointer" }}>
-                              <Send size={16} />
-                          </button>
+                          {agentLoading ? (
+                              <button onClick={abortQuery} style={{ background: "rgba(255,89,94,0.2)", border: "none", padding: "8px", borderRadius: "8px", color: "#ff595e", cursor: "pointer" }} title="Stop Generating">
+                                  <Square size={16} fill="currentColor" />
+                              </button>
+                          ) : (
+                              <button onClick={() => submitQuery()} disabled={!query.trim()} style={{ background: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "8px", color: "white", cursor: !query.trim() ? "not-allowed" : "pointer" }} title="Send">
+                                  <Send size={16} />
+                              </button>
+                          )}
                           <button onClick={() => setIsVoiceMode(true)} style={{ background: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "8px", color: "white", cursor: "pointer", marginLeft: "2px" }} title="Start Voice Mode">
                               <Mic size={16} />
                           </button>
@@ -606,7 +632,12 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
               {voiceStatus === 'idle' ? "..." : null}
             </div>
           )}
-          <div className={`voice-orb ${voiceStatus}`} />
+          <div className={`voice-orb ${voiceStatus}`} onClick={() => {
+              if (voiceStatus === 'thinking' || voiceStatus === 'speaking') {
+                  if (agentLoading) abortQuery();
+                  interrupt();
+              }
+          }} />
         </div>
       )}
     </div>

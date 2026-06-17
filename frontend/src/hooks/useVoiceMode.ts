@@ -128,6 +128,13 @@ export function useVoiceMode(onUserSpoke: (text: string) => void) {
         }
     }, [isVoiceMode, startListening]);
 
+    const interrupt = useCallback(() => {
+        if (synthRef.current) synthRef.current.cancel();
+        setTimeout(() => {
+            if (isVoiceMode) startListening();
+        }, 100);
+    }, [isVoiceMode, startListening]);
+
     return {
         isVoiceMode,
         setIsVoiceMode,
@@ -137,6 +144,7 @@ export function useVoiceMode(onUserSpoke: (text: string) => void) {
         startListening,
         stopListening,
         speakText,
-        setVoiceStatus
+        setVoiceStatus,
+        interrupt
     };
 }
