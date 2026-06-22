@@ -65,7 +65,7 @@ Instead of rendering plain text, the frontend actively parses the AI's output st
 - **Real-Time 2D Warehouse Map:** A visual grid rendering of the SQLite database coordinates, showing spatial relationships of racks and aisles.
 - **5-Second Polling & Force Refresh:** The map automatically pings the SQLite backend every 5 seconds to show items moving in real-time as the AI executes SQL skills.
 - **Dynamic Visual Legend:** A sidebar that analyzes the database to assign unique visual color-hashes and shape icons to categories dynamically as they are created.
-- **Voice Mode:** Integrated browser Speech Recognition API. Users can click the microphone icon to transcribe spoken commands natively.
+- **Voice Mode (Speech-to-Text):** Integrated browser Speech Recognition API. Users can click the microphone icon to transcribe spoken commands natively, enabling a completely hands-free warehouse management experience.
 
 ### 🗨️ Chat Session Management
 - **Session History:** The application persists previous conversations and loads them instantly.

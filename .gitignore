@@ -27,13 +27,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Ignore Local Database & Vectors
-database.db
-database.db-journal
-database/*.db
+# Ignore User Chat History (Keep Databases tracked)
 database/*.json
 database/history/
-chroma_db/
 
 # Ignore Temp Scripts & Scratchpads
 agents.md

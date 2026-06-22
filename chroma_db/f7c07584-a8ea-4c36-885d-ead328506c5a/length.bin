@@ -1,0 +1,2 @@
+invalid type: string "## Project Archive & Resources\nComplete project resources including raw datasets, processed datasets, YOLO model weights, demonstration videos, and additional files:\n\nGoogle Drive Archive:\nhttps://drive.google.com/drive/folders/1X2DTqPRzyYZypY-2txkBtzWPYZyk-N51?usp=sharing", expected f64ch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = Non
