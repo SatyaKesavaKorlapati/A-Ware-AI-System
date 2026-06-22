@@ -3,9 +3,36 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Loader2, Plus, Minus, Send, X, Package, Database, Brain, Sparkles, Network, CheckSquare, Search, Mic, Captions, CaptionsOff, List, ChevronLeft, RefreshCw, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useVoiceMode } from '../hooks/useVoiceMode';
+import { getMarkdownComponents } from './MarkdownComponents';
+
+// Global registry to ensure unique symbols for up to 100 categories
+const categorySymbolMap = new Map<string, number>();
+const availableSymbols = Array.from({length: 100}, (_, i) => i);
+// Shuffle symbols for randomness
+for (let i = availableSymbols.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [availableSymbols[i], availableSymbols[j]] = [availableSymbols[j], availableSymbols[i]];
+}
+
+function getSymbolForCategory(category: string): number {
+    const cat = (category || "").toLowerCase().trim();
+    if (categorySymbolMap.has(cat)) {
+        return categorySymbolMap.get(cat)!;
+    }
+    if (availableSymbols.length === 0) {
+        return Math.floor(Math.random() * 100);
+    }
+    const symbol = availableSymbols.pop()!;
+    categorySymbolMap.set(cat, symbol);
+    return symbol;
+}
 
 export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, onAgentInteraction }: { animUI: boolean, allowChanges: boolean, setAllowChanges: (v: boolean) => void, onAgentInteraction?: (q: string, r: string) => void }) {
+  const submitQueryRef = useRef<(text?: string) => void>(undefined);
+  const markdownComponents = useMemo(() => getMarkdownComponents((msg) => { if (submitQueryRef.current) submitQueryRef.current(msg); }), []);
+
   const [items, setItems] = useState<any[]>([]);
+  const [racksData, setRacksData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRack, setSelectedRack] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,7 +64,10 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
     try {
       const res = await fetch("http://localhost:8000/api/map/layout");
       const data = await res.json();
-      if (data.status === "success") setItems(data.items);
+      if (data.status === "success") {
+          setItems(data.items);
+          if (data.racks) setRacksData(data.racks);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -57,7 +87,7 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
   const [agentResponse, setAgentResponse] = useState("");
   
   const [showCaptions, setShowCaptions] = useState(true);
-  const submitQueryRef = useRef<(text?: string) => void>();
+  // submitQueryRef is now defined above 
   
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -118,7 +148,9 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
               if (data.response !== undefined) {
                  fullContent = data.response;
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error("SSE JSON Parse Error in Map View:", e, dataStr);
+            }
           }
         }
       }
@@ -173,21 +205,11 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
       return items.map(item => ({...item, rack_id: normalizeRackId(item.rack_id)}));
   }, [items]);
 
-  const getCategoryHash = (category: string) => {
-      let hash = 0;
-      const str = category.toLowerCase().trim();
-      for (let i = 0; i < str.length; i++) {
-          hash = str.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      hash = hash ^ (str.length * 9973);
-      return Math.abs(hash);
-  };
-
   const SHAPE_NAMES = ["Square", "Circle", "Triangle Up", "Triangle Down", "Diamond", "Cross", "Pentagon", "Hexagon", "Star", "Octagon"];
   const COLORS = ["#ef476f", "#118ab2", "#06d6a0", "#ffd166", "#f77f00", "#8338ec", "#38b000", "#ff9f1c", "#9e2a2b", "#6c757d"];
 
   const getShapeStyle = (category: string, overrideShapeIdx?: number) => {
-      let shapeIndex = overrideShapeIdx !== undefined ? overrideShapeIdx : Math.floor(getCategoryHash(category) / 10) % 10;
+      const shapeIndex = overrideShapeIdx !== undefined ? overrideShapeIdx : Math.floor(getSymbolForCategory(category) / 10);
       const style: React.CSSProperties = { width: "12px", height: "12px", borderRadius: "2px", clipPath: "none", flexShrink: 0 };
       switch(shapeIndex) {
           case 1: style.borderRadius = "50%"; break;
@@ -204,17 +226,17 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
   };
 
   const getColor = (category: string, overrideColorIdx?: number) => {
-      let colorIndex = overrideColorIdx !== undefined ? overrideColorIdx : getCategoryHash(category) % 10;
+      const colorIndex = overrideColorIdx !== undefined ? overrideColorIdx : getSymbolForCategory(category) % 10;
       return COLORS[colorIndex];
   };
 
   const legendData = useMemo(() => {
       const cats: Record<number, Record<string, {colorIdx: number, count: number}>> = {};
       itemsWithNormalizedRack.forEach(item => {
-          const cat = item.category.toLowerCase();
-          const hash = getCategoryHash(cat);
-          const shapeIdx = Math.floor(hash / 10) % 10;
-          const colorIdx = hash % 10;
+          const cat = (item.category || "").toLowerCase();
+          const symbolId = getSymbolForCategory(cat);
+          const shapeIdx = Math.floor(symbolId / 10);
+          const colorIdx = symbolId % 10;
           if (!cats[shapeIdx]) cats[shapeIdx] = {};
           if (!cats[shapeIdx][cat]) {
               cats[shapeIdx][cat] = { colorIdx: colorIdx, count: 0 };
@@ -224,29 +246,29 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
       return cats;
   }, [itemsWithNormalizedRack]);
 
-  const racks = useMemo(() => {
-      return Array.from(new Set(itemsWithNormalizedRack.map(i => i.rack_id))).sort((a: any, b: any) => a - b);
-  }, [itemsWithNormalizedRack]);
+  const racksList = useMemo(() => {
+      if (racksData && racksData.length > 0) {
+          return racksData.sort((a: any, b: any) => a.id - b.id);
+      }
+      // Fallback if older API
+      return Array.from(new Set(itemsWithNormalizedRack.map(i => i.rack_id))).sort((a: any, b: any) => a - b).map(r => ({ id: r, capacity: 600 }));
+  }, [itemsWithNormalizedRack, racksData]);
 
   const racksItemsMap = useMemo(() => {
       const map: Record<number, any[]> = {};
-      racks.forEach(r => map[r as number] = []);
+      racksList.forEach(r => map[r.id as number] = []);
       itemsWithNormalizedRack.forEach(item => {
           if (map[item.rack_id]) map[item.rack_id].push(item);
       });
       return map;
-  }, [itemsWithNormalizedRack, racks]);
-
-  const racksList = useMemo(() => {
-      return Array.from(racks).sort((a: any, b: any) => a - b);
-  }, [racks]);
+  }, [itemsWithNormalizedRack, racksList]);
 
   const globalSearchResults = useMemo(() => {
       if (!globalSearchQuery.trim()) return {};
       const q = globalSearchQuery.toLowerCase();
       const filtered = itemsWithNormalizedRack.filter(i => 
           (i.name || '').toLowerCase().includes(q) || 
-          i.category.toLowerCase().includes(q) ||
+          (i.category || '').toLowerCase().includes(q) ||
           String(i.id).includes(q)
       );
       
@@ -273,7 +295,8 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
       </div>
       
       <div style={{ display: "flex", flexWrap: "wrap", gap: "30px", flex: 1, overflowY: "auto", paddingBottom: "100px" }}>
-        {racksList.map(rack => {
+        {racksList.map(rackObj => {
+            const rack = rackObj.id;
             const rackItems = racksItemsMap[rack as number] || [];
             return (
                 <div 
@@ -298,15 +321,27 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
                   onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.zIndex = "10"; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.zIndex = "1"; }}
                 >
-                    <h3 style={{ color: "#8fa0ba", margin: "0 0 10px 0", fontSize: "0.9rem", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "5px", flexShrink: 0 }}>
-                        Rack {rack}
+                    <h3 style={{ color: "#8fa0ba", margin: "0 0 10px 0", fontSize: "0.9rem", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "5px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span>Rack {rack}</span>
+                        <span style={{ fontSize: "0.75rem", opacity: 0.6, fontWeight: "normal" }}>{rackItems.length} / {rackObj.capacity}</span>
                     </h3>
                     <div className="rack-items-container" style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignContent: "flex-start", flex: 1, overflowY: "auto", paddingRight: "4px" }}>
-                        {rackItems.map(item => (
-                            <div id={`map-item-${item.id}`} key={item.id} className={`map-item ${animUI ? 'anim-pop' : ''} ${newItems.has(item.id) ? 'item-flash' : ''}`} style={{ 
-                                ...getShapeStyle(item.category),
-                                background: getColor(item.category)
-                            }} title={`${item.name} (ID: ${item.id})`} />
+                        {Object.values(rackItems.reduce((acc, item) => {
+                            const cat = item.category;
+                            if (!acc[cat]) acc[cat] = { category: cat, count: 0, hasNew: false };
+                            acc[cat].count += 1;
+                            if (newItems.has(item.id)) acc[cat].hasNew = true;
+                            return acc;
+                        }, {} as Record<string, any>)).map((group: any) => (
+                            <div key={group.category} className={`map-item-group ${animUI ? 'anim-pop' : ''} ${group.hasNew ? 'item-flash' : ''}`} style={{
+                                display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "8px", flexShrink: 0
+                            }} title={`${group.category} x ${group.count}`}>
+                                <div style={{ 
+                                    ...getShapeStyle(group.category),
+                                    background: getColor(group.category)
+                                }} />
+                                <span style={{ fontSize: "0.8rem", color: "#8fa0ba", fontWeight: 600 }}>{group.count}</span>
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -317,7 +352,7 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
       {/* Floating Side Panel for Details */}
       {selectedRack !== null && (() => {
           const allRackItems = itemsWithNormalizedRack.filter(i => i.rack_id === selectedRack);
-          const filteredRackItems = allRackItems.filter(i => (i.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) || i.category.toLowerCase().includes(searchQuery.toLowerCase()));
+          const filteredRackItems = allRackItems.filter(i => (i.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) || (i.category || '').toLowerCase().includes(searchQuery.toLowerCase()));
           const groupedSelected = filteredRackItems.reduce((acc, item) => {
               if (!acc[item.category]) acc[item.category] = [];
               acc[item.category].push(item);
@@ -362,7 +397,7 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
                       <div key={cat} style={{ marginBottom: "20px" }}>
                           <h4 style={{ color: "#8fa0ba", textTransform: "uppercase", fontSize: "0.8rem", letterSpacing: "1px", marginBottom: "10px" }}>{cat} ({groupedSelected[cat].length})</h4>
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                              {groupedSelected[cat].map((item: any) => (
+                              {groupedSelected[cat].slice(0, 50).map((item: any) => (
                                   <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(0,0,0,0.2)", padding: "8px 12px", borderRadius: "8px" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                           <div style={{ ...getShapeStyle(item.category), background: getColor(item.category) }} />
@@ -374,6 +409,11 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
                                       </div>
                                   </div>
                               ))}
+                              {groupedSelected[cat].length > 50 && (
+                                  <div style={{ textAlign: "center", fontSize: "0.8rem", color: "#8fa0ba", padding: "4px 0", fontStyle: "italic" }}>
+                                      + {groupedSelected[cat].length - 50} more items (Use AI Chat to modify in bulk)
+                                  </div>
+                              )}
                           </div>
                       </div>
                   ))}
@@ -495,7 +535,7 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
                       
                       {agentResponse && (
                           <div style={{ background: "rgba(0,0,0,0.2)", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "0.9rem", color: "#e2e8f0" }}>
-                              <ReactMarkdown>{agentResponse}</ReactMarkdown>
+                              <ReactMarkdown components={markdownComponents}>{agentResponse}</ReactMarkdown>
                           </div>
                       )}
                       

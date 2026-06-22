@@ -26,3 +26,25 @@ __pycache__/
 # Ignore OS files
 .DS_Store
 Thumbs.db
+
+# Ignore Local Database & Vectors
+database.db
+database.db-journal
+database/*.db
+database/*.json
+database/history/
+chroma_db/
+
+# Ignore Temp Scripts & Scratchpads
+agents.md
+claude.md
+implementation_plan.md
+refactor.py
+test_*.py
+test_brain.py
+test_rollback.py
+test_skills.py
+
+# Ignore Other Dirs
+MDta/
+Python/

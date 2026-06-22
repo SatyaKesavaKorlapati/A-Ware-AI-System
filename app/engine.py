@@ -52,49 +52,8 @@ YOLO_TO_METADATA_CATEGORY = {
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-@tool
-def calculate(expression: str) -> str:
-    """Evaluates a mathematical expression (e.g., '10 + 5 * 2'). Do not use this for SQL database operations."""
-    try:
-        return str(eval(expression, {"__builtins__": None}, {}))
-    except Exception as e:
-        return f"Error evaluating math: {e}"
-
-@tool
-def get_current_time() -> str:
-    """Returns the current local date and time."""
-    from datetime import datetime
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-@tool
-def search_wikipedia(query: str) -> str:
-    """Searches Wikipedia for general knowledge information."""
-    import wikipediaapi
-    try:
-        wiki = wikipediaapi.Wikipedia('A-Ware Assistant (support@example.com)', 'en')
-        page = wiki.page(query)
-        if not page.exists():
-            return "No information found on Wikipedia."
-        return page.summary[0:1500]
-    except Exception as e:
-        return f"Could not find information on Wikipedia: {e}"
-
-@tool
-def web_search(query: str) -> str:
-    """Searches the web for current events, news, or facts."""
-    from googlesearch import search
-    try:
-        results = search(query, num_results=3, advanced=True)
-        out = []
-        for r in results:
-            out.append(f"{r.title}: {r.description}")
-        if not out:
-            return "No results found on the web."
-        return "\n".join(out)
-    except Exception as e:
-        return f"Web search failed: {e}"
-
-TOOLS = [calculate, get_current_time, search_wikipedia, web_search]
+from app.general_skills import GENERAL_TOOLS
+TOOLS = GENERAL_TOOLS
 
 def reducer_list(a: list, b: list) -> list:
     return a + b if b else a
@@ -177,10 +136,9 @@ class AWareEngine:
     def node_contextualize(self, state: AgentState) -> dict:
         query = state["current_query"]
         history = state["history"]
-        if not history:
-            return {"standalone_query": query}
-            
-        sys_prompt = "You are an AI tasked with contextualizing a follow-up query. Given the chat history and the latest user query, rewrite the user query so it is a standalone, self-contained question that includes all necessary context (e.g. subjects, items). Do NOT answer the query, just return the standalone query."
+        from datetime import datetime
+        current_date = datetime.now().strftime("%B %d, %Y")
+        sys_prompt = f"You are an AI tasked with contextualizing a follow-up query. The current date is {current_date}. Given the chat history and the latest user query, rewrite the user query so it is a standalone, self-contained question that includes all necessary context (e.g. subjects, items). Do NOT answer the query, just return the standalone query."
         
         msgs = [SystemMessage(content=sys_prompt)]
         for msg in history[-4:]:
@@ -192,17 +150,19 @@ class AWareEngine:
 
     def node_supervisor(self, state: AgentState) -> dict:
         query = state["standalone_query"]
-        
-        sys_prompt = '''You are the Agentic RAG Supervisor. Route the query to the correct specialized agents.
+        from datetime import datetime
+        current_date = datetime.now().strftime("%B %d, %Y")
+        sys_prompt = f'''You are the Agentic RAG Supervisor. The current date is {current_date}. Route the query to the correct specialized agents.
         Available Agents:
         - vision_agent: Route here if the user uploaded images and asks about what is in the images.
-        - sql_agent: Route here if the user asks about warehouse inventory, counting items, finding items, breakdowns, physical locations, or moving items.
+        - sql_agent: Route here if the user asks about warehouse inventory, counting items, finding items, breakdowns, physical locations, or moving items. CRITICAL: Any query asking "how many", "count", "do we have", or mentioning warehouse items (like forklifts, helmets), OR using action verbs like "add", "remove", "move", "rename", OR mentioning a "Rack" MUST route here.
         - rag_manual_agent: Route here if the user asks about operational system manuals, location, owner, or capabilities.
         - rag_specs_agent: Route here if the user asks about YOLO training metrics, precision, recall, synthetic dataset generation, VLM architecture, system specs, authors, README, or research reports.
 
         If a query requires multiple agents, route to ALL of them.
         Always route to 'vision_agent' if the user uploaded images.
-        Respond ONLY with a JSON list of strings, like ["sql_agent", "rag_specs_agent"]. Do NOT output markdown formatting like ```json.
+        If the query is a purely general knowledge question (e.g. "who is the president", "how are you", "what is the capital of") and does NOT relate to the warehouse, inventory, or items, return an EMPTY list: []. Do NOT return [] if the user is asking about our inventory or equipment.
+        Respond ONLY with a JSON list of strings, like ["sql_agent", "rag_specs_agent"] or []. Do NOT output markdown formatting like ```json.
         '''
         
         messages = [
@@ -217,11 +177,14 @@ class AWareEngine:
         
         try:
             next_nodes = json.loads(response)
+            if not isinstance(next_nodes, list):
+                next_nodes = []
         except:
-            next_nodes = ["sql_agent"]
+            next_nodes = []
             
-        if not isinstance(next_nodes, list) or len(next_nodes) == 0:
-            next_nodes = ["sql_agent"]
+        # Ensure final_synthesis is always called
+        if len(next_nodes) == 0:
+            next_nodes = ["final_synthesis"]
             
         return {"next_nodes": next_nodes}
 
@@ -236,31 +199,35 @@ class AWareEngine:
         
         if images:
             for idx, img in enumerate(images):
-                pil_image = img.convert("RGB")
-                results = self.yolo(pil_image, verbose=False)[0]
-                
-                hl_det = []
-                counts = Counter()
-                for box in results.boxes:
-                    cls_id = int(box.cls[0].item())
-                    cls_name = results.names[cls_id]
-                    mapped_cat = YOLO_TO_METADATA_CATEGORY.get(cls_name, cls_name)
+                try:
+                    pil_image = img.convert("RGB")
+                    results = self.yolo(pil_image, verbose=False)[0]
                     
-                    if not target_cats or mapped_cat in target_cats:
-                        x1, y1, x2, y2 = box.xyxy[0].tolist()
-                        hl_det.append({
-                            "class_name": mapped_cat,
-                            "box": [x1, y1, x2, y2]
-                        })
-                        counts[mapped_cat] += 1
+                    hl_det = []
+                    counts = Counter()
+                    for box in results.boxes:
+                        cls_id = int(box.cls[0].item())
+                        cls_name = results.names[cls_id]
+                        mapped_cat = YOLO_TO_METADATA_CATEGORY.get(cls_name, cls_name)
                         
-                info = ", ".join([f"{count} {cat}" for cat, count in counts.items()])
-                if not info: info = "No objects detected."
-                vision_infos.append(f"[Image {idx + 1}]: {info}")
-                
-                canvas = self._draw_boxes(pil_image, hl_det)
-                annotated_images.append(_image_to_png_bytes(canvas))
-                metadata.append({"vision_highlighted": list(counts.keys())})
+                        if not target_cats or mapped_cat in target_cats:
+                            x1, y1, x2, y2 = box.xyxy[0].tolist()
+                            hl_det.append({
+                                "class_name": mapped_cat,
+                                "box": [x1, y1, x2, y2]
+                            })
+                            counts[mapped_cat] += 1
+                            
+                    info = ", ".join([f"{count} {cat}" for cat, count in counts.items()])
+                    if not info: info = "No objects detected."
+                    vision_infos.append(f"[Image {idx + 1}]: {info}")
+                    
+                    canvas = self._draw_boxes(pil_image, hl_det)
+                    annotated_images.append(_image_to_png_bytes(canvas))
+                    metadata.append({"vision_highlighted": list(counts.keys())})
+                except Exception as e:
+                    vision_infos.append(f"[Image {idx + 1}]: Error processing image: {str(e)}")
+                    print(f"YOLO vision processing error: {e}")
         
         v_info = "\n".join(vision_infos) if vision_infos else "No images provided."
         return {"vision_info": v_info, "annotated_images": annotated_images, "metadata": metadata, "target_categories": target_cats}
@@ -270,12 +237,15 @@ class AWareEngine:
         allow_changes = state["allow_changes"]
         
         from app.sql_skills import create_sql_tools
-        sql_tools = create_sql_tools(allow_changes)
+        sql_tools = create_sql_tools(allow_changes) + TOOLS
         
-        sys_prompt = '''You are the SQL Inventory Agent. You have access to explicit warehouse skills.
-        DO NOT generate raw SQL. Use your explicit tools (`get_inventory`, `add_inventory`, `remove_inventory`, `move_inventory`) to interact with the database safely.
-        Answer the user's query exactly. If you need to make modifications and the tools return REFUSED because safety toggle is OFF, explicitly inform the user they must enable the 'Database Modifying Mode'.
+        sys_prompt = '''You are the SQL Inventory Agent. You have access to explicit warehouse skills and general tools like web search.
+        DO NOT generate raw SQL. Use your explicit tools (`get_inventory`, `add_inventory`, `remove_inventory`, `move_inventory`, `rename_inventory`) to interact with the database safely.
+        If you need to search the web to find constraints (e.g. brand names, versions), use the web_search tool FIRST, and THEN use the inventory tools.
+        Answer the user's query exactly. If you need to make modifications and the tools return an error or item not found, explain the exact error.
+        If a tool returns an error starting with "REFUSED:", quote the exact error message to the user. Do NOT mention "Database Modifying Mode" unless it is literally in the tool's error message.
         Always query for inventory before taking actions if you are unsure of the current state.
+        If the user's query is NOT related to warehouse inventory, items, or SQL, simply reply "IDK" so you do not hallucinate unrelated facts.
         '''
         
         try:
@@ -285,7 +255,30 @@ class AWareEngine:
                 HumanMessage(content=query)
             ]
             result = agent.invoke({"messages": messages})
-            sql_info = self._extract_text(result["messages"][-1].content)
+            
+            output_msgs = result["messages"][len(messages):]
+            thinking_steps = []
+            final_text = ""
+            for msg in output_msgs:
+                if msg.__class__.__name__ == "AIMessage":
+                    content_str = self._extract_text(msg.content) if msg.content else ""
+                    if content_str and getattr(msg, 'tool_calls', None):
+                        thinking_steps.append(content_str)
+                    if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                        for tc in msg.tool_calls:
+                            args_str = str(tc.get('args', {}))
+                            thinking_steps.append(f"Using tool **{tc['name']}** with args: `{args_str}`")
+                    if not getattr(msg, 'tool_calls', None) and content_str:
+                        final_text = content_str
+                elif msg.__class__.__name__ == "ToolMessage":
+                    content_str = str(msg.content)[:500]
+                    thinking_steps.append(f"Tool Result ({msg.name}):\n```\n{content_str}\n```")
+
+            sql_info = ""
+            if thinking_steps:
+                sql_info += "SQL AGENT THINKING:\n" + "\n".join(thinking_steps) + "\n\n"
+            sql_info += final_text or self._extract_text(result["messages"][-1].content)
+            
         except Exception as e:
             sql_info = f"Error interpreting SQL agent: {e}"
             
@@ -293,23 +286,33 @@ class AWareEngine:
 
     def node_rag_manual_agent(self, state: AgentState) -> dict:
         q = state["standalone_query"]
-        res = self.collection_manuals.query(query_texts=[q], n_results=3)
-        rag_docs = "\n".join(res.get("documents", [[]])[0])
+        try:
+            res = self.collection_manuals.query(query_texts=[q], n_results=3)
+            rag_docs = "\n".join(res.get("documents", [[]])[0])
+        except Exception as e:
+            print(f"RAG manual query error: {e}")
+            rag_docs = "Error retrieving manual documents."
         return {"rag_manual_info": rag_docs}
 
     def node_rag_specs_agent(self, state: AgentState) -> dict:
         q = state["standalone_query"]
-        res = self.collection_specs.query(query_texts=[q], n_results=3)
-        rag_docs = "\n".join(res.get("documents", [[]])[0])
+        try:
+            res = self.collection_specs.query(query_texts=[q], n_results=3)
+            rag_docs = "\n".join(res.get("documents", [[]])[0])
+        except Exception as e:
+            print(f"RAG specs query error: {e}")
+            rag_docs = "Error retrieving specs documents."
         return {"rag_specs_info": rag_docs}
 
     def node_final_synthesis(self, state: AgentState) -> dict:
+        from datetime import datetime
+        current_date = datetime.now().strftime("%B %d, %Y")
         sys_inst = (
-            "You are A-Ware, a helpful Warehouse Logistics AI.\n"
-            "You MUST think step-by-step and wrap your internal reasoning inside <thinking>...</thinking> tags at the very beginning of your final response. THIS IS MANDATORY for every single response.\n"
+            f"You are A-Ware, a helpful Warehouse Logistics AI. The current date is {current_date}.\n"
             "Write a natural, conversational response.\n"
             "You will be given raw output from various specialized sub-agents. Synthesize them into a clear answer.\n"
-            "CRITICAL: If the SQL Inventory Agent states that modifications are denied because the safety toggle is OFF, you MUST explicitly tell the user that they need to enable the 'Database Modifying Mode' toggle in the UI. DO NOT pretend that the items were added or deleted.\n"
+            "CRITICAL: Explain exactly what failed if an agent reports a failure (e.g. 'Item not found'). If a tool or agent returns an error starting with 'REFUSED:', quote the exact error message to the user. Do NOT hallucinate the phrase 'Database Modifying Mode' as an excuse for general errors or unavailable items.\n"
+            "CRITICAL: If the provided Agent Data does not contain the complete answer, or an agent failed because it lacked context (e.g., SQL agent needed Vision data to run an update), you MUST use your tools to finish the task (e.g. using sql tools to make database changes based on vision_info)!\n"
             "CRITICAL: If the provided Agent Data does not contain the answer (e.g., for general knowledge, current events, or real-world facts), you MUST use your web_search or search_wikipedia tools to find the answer before responding!"
         )
 
@@ -321,7 +324,7 @@ class AWareEngine:
             f"RAG Manual Agent:\n{state.get('rag_manual_info', 'Not called')}\n\n"
             f"RAG Specs & Research Agent:\n{state.get('rag_specs_info', 'Not called')}\n\n"
             f"Vision Agent:\n{state.get('vision_info', 'Not called')}\n\n"
-            "Synthesize this information into a response."
+            "Synthesize this information into a response. If the SQL Inventory Agent failed to make an inventory update due to missing information (e.g., missing count from Vision Agent), you must use your SQL tools to complete the inventory update now."
         )
         
         messages = [SystemMessage(content=sys_inst)]
@@ -333,9 +336,40 @@ class AWareEngine:
         messages.append(HumanMessage(content=prompt_text))
 
         try:
-            agent = create_react_agent(self.llm, TOOLS)
+            from app.sql_skills import create_sql_tools
+            final_tools = create_sql_tools(state["allow_changes"]) + TOOLS
+            agent = create_react_agent(self.llm, final_tools)
             result = agent.invoke({"messages": messages})
-            response = self._extract_text(result["messages"][-1].content)
+            
+            output_msgs = result["messages"][len(messages):]
+            thinking_steps = []
+            final_text = ""
+            
+            for msg in output_msgs:
+                if msg.__class__.__name__ == "AIMessage":
+                    content_str = self._extract_text(msg.content) if msg.content else ""
+                    if content_str and getattr(msg, 'tool_calls', None):
+                        thinking_steps.append(content_str)
+                    if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                        for tc in msg.tool_calls:
+                            args_str = str(tc.get('args', {}))
+                            thinking_steps.append(f"Using tool **{tc['name']}** with args: `{args_str}`")
+                    if not getattr(msg, 'tool_calls', None) and content_str:
+                        final_text = content_str
+                elif msg.__class__.__name__ == "ToolMessage":
+                    content_str = str(msg.content)[:500] + ("..." if len(str(msg.content)) > 500 else "")
+                    thinking_steps.append(f"Tool Result ({msg.name}):\n```\n{content_str}\n```")
+
+            if thinking_steps:
+                thinking_block = "<thinking>\n" + "\n\n".join(thinking_steps) + "\n</thinking>\n\n"
+            else:
+                thinking_block = ""
+                
+            if thinking_block and "<thinking>" not in final_text:
+                response = thinking_block + final_text
+            else:
+                response = final_text or self._extract_text(result["messages"][-1].content)
+                
         except Exception as e:
             response = f"I encountered an error trying to process the final response: {str(e)}"
         return {"final_response": response}
@@ -357,7 +391,7 @@ class AWareEngine:
         def route(state: AgentState):
             return state["next_nodes"]
             
-        builder.add_conditional_edges("supervisor", route, ["sql_agent", "rag_manual_agent", "rag_specs_agent", "vision_agent"])
+        builder.add_conditional_edges("supervisor", route, ["sql_agent", "rag_manual_agent", "rag_specs_agent", "vision_agent", "final_synthesis"])
         
         builder.add_edge("sql_agent", "final_synthesis")
         builder.add_edge("rag_manual_agent", "final_synthesis")

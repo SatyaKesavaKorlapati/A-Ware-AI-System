@@ -91,23 +91,27 @@ async def chat_endpoint(
             "final_synthesis": "Synthesizing final response..."
         }
         
-        for node_name, state_update in engine.process_query(query, images_to_process, parsed_history, use_yolo_only, allow_changes):
-            if node_name in status_map:
-                yield f"data: {json.dumps({'status': status_map[node_name]})}\n\n"
+        try:
+            for node_name, state_update in engine.process_query(query, images_to_process, parsed_history, use_yolo_only, allow_changes):
+                if node_name in status_map:
+                    yield f"data: {json.dumps({'status': status_map[node_name]})}\n\n"
+                    
+                if node_name == "final_synthesis":
+                    ans = state_update.get("final_response", "")
+                if "metadata" in state_update:
+                    meta = state_update["metadata"]
+                if "annotated_images" in state_update:
+                    ann = state_update["annotated_images"]
+                    
+            encoded_annotations = []
+            for img_bytes in ann:
+                encoded_str = base64.b64encode(img_bytes).decode("utf-8")
+                encoded_annotations.append(f"data:image/jpeg;base64,{encoded_str}")
                 
-            if node_name == "final_synthesis":
-                ans = state_update.get("final_response", "")
-            if "metadata" in state_update:
-                meta = state_update["metadata"]
-            if "annotated_images" in state_update:
-                ann = state_update["annotated_images"]
-                
-        encoded_annotations = []
-        for img_bytes in ann:
-            encoded_str = base64.b64encode(img_bytes).decode("utf-8")
-            encoded_annotations.append(f"data:image/jpeg;base64,{encoded_str}")
-            
-        yield f"data: {json.dumps({'response': ans, 'metadata': meta, 'annotated_images': encoded_annotations})}\n\n"
+            yield f"data: {json.dumps({'response': ans, 'metadata': meta, 'annotated_images': encoded_annotations})}\n\n"
+        except Exception as e:
+            print(f"Exception during stream: {e}")
+            yield f"data: {json.dumps({'response': f'Backend Exception: {str(e)}', 'metadata': [], 'annotated_images': []})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -165,7 +169,8 @@ from app.sql_manager import query_db, execute_db
 @app.get("/api/map/layout")
 def get_map_layout():
     items = query_db("SELECT * FROM inventory")
-    return {"status": "success", "items": items}
+    racks = query_db("SELECT * FROM racks ORDER BY id ASC")
+    return {"status": "success", "items": items, "racks": racks}
 
 class AdjustRequest(BaseModel):
     item_id: int

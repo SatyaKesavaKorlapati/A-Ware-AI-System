@@ -27,6 +27,23 @@ def init_db():
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS racks (
+            id INTEGER PRIMARY KEY,
+            capacity INTEGER DEFAULT 600,
+            physical_aisle INTEGER
+        )
+    """)
+    
+    # Check if racks exist, if not, seed default 12 racks
+    cursor.execute("SELECT COUNT(*) as count FROM racks")
+    row = cursor.fetchone()
+    if row and dict(row).get('count', 0) == 0:
+        import math
+        for r in range(1, 13):
+            aisle = math.ceil(r / 2.0)
+            cursor.execute("INSERT INTO racks (id, capacity, physical_aisle) VALUES (?, ?, ?)", (r, 600, aisle))
+            
     conn.commit()
     conn.close()
 
