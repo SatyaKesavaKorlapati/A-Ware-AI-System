@@ -35,10 +35,12 @@ def main():
     
     # Prompt for API keys
     gemini_key = input("Please enter your Gemini API Key: ").strip()
+    tavily_key = input("Please enter your Tavily API Key (for Live Web Search): ").strip()
     
     print("\nCreating .env file...")
     with open(".env", "w", encoding="utf-8") as f:
         f.write(f"GEMINI_API_KEY={gemini_key}\n")
+        f.write(f"TAVILY_API_KEY={tavily_key}\n")
     print("✅ .env file created.")
     
     # Prompt for Launcher

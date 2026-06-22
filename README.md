@@ -52,11 +52,18 @@ The application will be live at `http://localhost:3000`.
 
 Check out the interactive A-Ware application in action!
 
-![UI Showcase](assets/1_comp.jpg)
-![Interactive Map](assets/2_comp.jpg)
-
-**Application Walkthrough:**
-![Voice Mode & Logic Showcase](assets/5_comp.jpg)
+<p align="center">
+  <img src="assets/1_comp.jpg" width="49%">
+  <img src="assets/4_comp.jpg" width="49%">
+</p>
+<p align="center">
+  <img src="assets/2.png" width="49%">
+  <img src="assets/5_comp.jpg" width="49%">
+</p>
+<p align="center">
+  <img src="assets/1.png" width="49%">
+  <img src="assets/3.png" width="49%">
+</p>
 
 ---
 
