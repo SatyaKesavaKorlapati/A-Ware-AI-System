@@ -32,3 +32,5 @@ langchain
 langchain-core
 langchain-google-genai
 langgraph
+beautifulsoup4
+wikipedia-api
