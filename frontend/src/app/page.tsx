@@ -6,7 +6,7 @@ import { Send, ImagePlus, ChevronDown, ChevronRight, Loader2, X, Plus, MessageSq
 import WarehouseMap from "../components/WarehouseMap";
 import { useVoiceMode } from "../hooks/useVoiceMode";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || `${API_URL}";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type Message = {
   role: "user" | "assistant";
@@ -256,7 +256,7 @@ export default function Home() {
 
   // Load Sessions
   useEffect(() => {
-    fetch(`${API_URL}/api/sessions")
+    fetch(`${API_URL}/api/sessions`)
       .then(res => res.json())
       .then((data: ChatSession[]) => {
         setSessions(data);
@@ -276,7 +276,7 @@ export default function Home() {
       const is_pinned = exists ? exists.is_pinned : false;
       const s: ChatSession = { id, title, emoji, messages: msgs, imageQueue: queue, is_pinned, updated_at: Date.now() };
       
-      fetch(`${API_URL}/api/sessions", {
+      fetch(`${API_URL}/api/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(s)
@@ -352,7 +352,7 @@ export default function Home() {
     setCustomEmoji("");
     
     if (sessionToSave) {
-       fetch(`${API_URL}/api/sessions", {
+       fetch(`${API_URL}/api/sessions`, {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({ ...sessionToSave, emoji: newEmoji })
@@ -389,7 +389,7 @@ export default function Home() {
 
   const generateTitle = async (query: string, sid: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/generate-title", {
+      const res = await fetch(`${API_URL}/api/generate-title`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query })
@@ -563,7 +563,7 @@ export default function Home() {
       
       currentFiles.forEach((file) => formData.append("files", file));
 
-      const res = await fetch(`${API_URL}/api/chat", {
+      const res = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         body: formData,
         signal: abortControllerRef.current.signal
