@@ -6,6 +6,8 @@ import { Send, ImagePlus, ChevronDown, ChevronRight, Loader2, X, Plus, MessageSq
 import WarehouseMap from "../components/WarehouseMap";
 import { useVoiceMode } from "../hooks/useVoiceMode";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || `${API_URL}";
+
 type Message = {
   role: "user" | "assistant";
   content: string;
@@ -254,7 +256,7 @@ export default function Home() {
 
   // Load Sessions
   useEffect(() => {
-    fetch("http://localhost:8000/api/sessions")
+    fetch(`${API_URL}/api/sessions")
       .then(res => res.json())
       .then((data: ChatSession[]) => {
         setSessions(data);
@@ -274,7 +276,7 @@ export default function Home() {
       const is_pinned = exists ? exists.is_pinned : false;
       const s: ChatSession = { id, title, emoji, messages: msgs, imageQueue: queue, is_pinned, updated_at: Date.now() };
       
-      fetch("http://localhost:8000/api/sessions", {
+      fetch(`${API_URL}/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(s)
@@ -310,7 +312,7 @@ export default function Home() {
     const newStatus = !currentPinStatus;
     setSessions(prev => prev.map(s => s.id === id ? { ...s, is_pinned: newStatus } : s));
     try {
-      await fetch(`http://localhost:8000/api/sessions/${id}/pin`, {
+      await fetch(`${API_URL}/api/sessions/${id}/pin`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_pinned: newStatus })
@@ -332,7 +334,7 @@ export default function Home() {
       return;
     }
     try {
-      await fetch(`http://localhost:8000/api/sessions/${id}/title`, {
+      await fetch(`${API_URL}/api/sessions/${id}/title`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: renamingText })
@@ -350,7 +352,7 @@ export default function Home() {
     setCustomEmoji("");
     
     if (sessionToSave) {
-       fetch("http://localhost:8000/api/sessions", {
+       fetch(`${API_URL}/api/sessions", {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({ ...sessionToSave, emoji: newEmoji })
@@ -370,7 +372,7 @@ export default function Home() {
       setVaporizingSessionId(id);
       setTimeout(async () => {
         try {
-          await fetch(`http://localhost:8000/api/sessions/${id}`, { method: "DELETE" });
+          await fetch(`${API_URL}/api/sessions/${id}`, { method: "DELETE" });
           setSessions(prev => prev.filter(s => s.id !== id));
           if (currentSessionId === id) startNewSession();
         } catch(e) {}
@@ -378,7 +380,7 @@ export default function Home() {
       }, animSpeed * 1000);
     } else {
       try {
-        await fetch(`http://localhost:8000/api/sessions/${id}`, { method: "DELETE" });
+        await fetch(`${API_URL}/api/sessions/${id}`, { method: "DELETE" });
         setSessions(prev => prev.filter(s => s.id !== id));
         if (currentSessionId === id) startNewSession();
       } catch(e) {}
@@ -387,7 +389,7 @@ export default function Home() {
 
   const generateTitle = async (query: string, sid: string) => {
     try {
-      const res = await fetch("http://localhost:8000/api/generate-title", {
+      const res = await fetch(`${API_URL}/api/generate-title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query })
@@ -396,7 +398,7 @@ export default function Home() {
       const title = data.title;
       
       setSessions(prev => prev.map(s => s.id === sid ? { ...s, title } : s));
-      await fetch(`http://localhost:8000/api/sessions/${sid}/title`, {
+      await fetch(`${API_URL}/api/sessions/${sid}/title`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title })
@@ -561,7 +563,7 @@ export default function Home() {
       
       currentFiles.forEach((file) => formData.append("files", file));
 
-      const res = await fetch("http://localhost:8000/api/chat", {
+      const res = await fetch(`${API_URL}/api/chat", {
         method: "POST",
         body: formData,
         signal: abortControllerRef.current.signal

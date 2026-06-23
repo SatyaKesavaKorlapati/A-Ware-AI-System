@@ -62,7 +62,8 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
 
   const fetchLayout = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/map/layout");
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const res = await fetch(`${API_URL}/api/map/layout`);
       const data = await res.json();
       if (data.status === "success") {
           setItems(data.items);
@@ -122,7 +123,8 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
       formData.append("query", finalQuery + " (Just do it and reply concisely, I am in map view)");
       formData.append("allow_changes", allowChanges.toString());
       
-      const res = await fetch("http://localhost:8000/api/chat", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const res = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         body: formData,
         signal: abortControllerRef.current.signal
@@ -185,7 +187,8 @@ export default function WarehouseMap({ animUI, allowChanges, setAllowChanges, on
 
   const adjustItem = async (id: number, action: string) => {
     try {
-      await fetch("http://localhost:8000/api/map/adjust", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      await fetch(`${API_URL}/api/map/adjust`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ item_id: id, action })
